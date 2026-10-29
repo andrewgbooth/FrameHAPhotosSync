@@ -92,7 +92,7 @@ def test_sync_uploads_newest_then_skips_when_unchanged_then_replaces(syncer):
     assert st["last_status"] == "ok" and [u["photo_id"] for u in st["uploaded"]] == ["p5", "p4", "p3"]
     tv = FakeTV.instances[-1]
     assert tv.uploaded == [(3, "shadowbox_polar")] and tv.deleted == []
-    assert tv.shown == [("MY_F0001", 15, True, True)]  # newest shown, rotation set, art mode on
+    assert tv.shown == [("MY_F0001", 0, True, True)]  # newest shown, rotation untouched, art mode on
     first_ids = [u["content_id"] for u in st["uploaded"]]
 
     syncer.run("schedule")  # nothing changed

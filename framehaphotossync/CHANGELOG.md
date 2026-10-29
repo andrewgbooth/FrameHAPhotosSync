@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3
+- *Rotate through My Photos* is now off by default (set it once on the TV, or opt in here). Some TVs
+  never answer the request; it now gives up after 8 seconds and doesn't try the fallback call.
+
 ## 0.5.2
 - Every request to the TV now has a hard deadline, so a TV that ignores a request can no longer hang a
   sync forever; each final step reports what it is doing and failures become warnings.

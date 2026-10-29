@@ -34,7 +34,7 @@ connection accept the pairing prompt on the TV. The TV must be on or in Art Mode
 | Landscape / Portrait photos | *Fill screen (smart crop)* or *Fit with blurred edges*. Every photo is output at 16:9 whatever you choose. |
 | Matte | The Frame's matte style; *Load from TV* lists what your TV supports. |
 | Remove previous | Deletes only photos this add-on uploaded earlier, never your other art. Anything the TV fails to delete is retried next sync. |
-| Rotate through My Photos | Sets the TV's own rotation interval (and shuffle) so it cycles through the uploaded photos. |
+| Rotate through My Photos | Optional, off by default. Sets the TV's own rotation interval (and shuffle). You can set this once on the TV instead (Art Mode → Art Mode settings → Slideshow → My Photos) and it persists across syncs. Some TV models ignore the request. |
 | Show newest / Art Mode | Display the newest photo straight away, and switch the TV to Art Mode after syncing. |
 
 *Sync now* always re-uploads. Scheduled runs skip when the newest selection hasn't changed.

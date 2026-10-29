@@ -40,7 +40,7 @@ DEFAULTS: dict[str, Any] = {
     "portrait_fit": "blur",  # crop | blur (applies to portrait photos only)
     "select_first": True,
     "enable_art_mode": True,
-    "slideshow_minutes": 15,  # 0 = leave the TV's rotation settings alone
+    "slideshow_minutes": 0,  # 0 = leave the TV's rotation settings alone (set it once on the TV)
     "slideshow_shuffle": True,
 }
 
