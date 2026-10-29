@@ -102,13 +102,13 @@ class FrameTV:
         except Exception as exc:
             raise self._wrap(exc) from exc
 
-    def apply(self, images: list[tuple[bytes, bool]], matte: str, delete_ids: list[str],
+    def apply(self, images: list[bytes], matte: str, delete_ids: list[str],
               select_first: bool, enable_art_mode: bool) -> list[str]:
-        """Upload ``images`` (jpeg bytes, is_portrait); returns the new content ids."""
+        """Upload 3840x2160 JPEGs; returns the new content ids."""
         try:
             art = self._art()
             new_ids: list[str] = []
-            for data, portrait in images:
+            for data in images:
                 m = matte or "none"
                 new_ids.append(art.upload(data, matte=m, portrait_matte=m, file_type="jpg"))
             if delete_ids:

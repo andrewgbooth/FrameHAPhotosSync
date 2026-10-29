@@ -146,11 +146,11 @@ class Syncer:
                 and [u["photo_id"] for u in prev] == [p.id for p in chosen]):
             return "No new photos; the TV is already up to date."
 
-        images: list[tuple[bytes, bool]] = []
+        images: list[bytes] = []
         ids: list[str] = []
         for p in chosen:
             try:
-                images.append(imaging.prepare_for_tv(p.fetch("full"), s["image_fit"]))
+                images.append(imaging.prepare_for_tv(p.fetch("full"), s["image_fit"], s["portrait_fit"]))
                 ids.append(p.id)
             except Exception as exc:
                 self.state.log(f"Skipped a photo: {exc}", "warning")

@@ -1,7 +1,7 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const FIELDS = ["public_url", "icloud_apple_id", "icloud_password", "tv_host", "time", "frequency",
-  "weekday", "day_of_month", "photo_count", "selection", "image_fit", "matte"];
+  "weekday", "day_of_month", "photo_count", "selection", "image_fit", "portrait_fit", "matte"];
 const NUMERIC = ["weekday", "day_of_month", "photo_count"];
 const CHECKS = ["schedule_enabled", "replace_previous", "select_first", "enable_art_mode"];
 const DEFAULT_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_black",

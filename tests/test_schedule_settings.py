@@ -49,3 +49,11 @@ def test_settings_roundtrip_mask_and_validation(tmp_path):
     for bad in ({"frequency": "hourly"}, {"time": "25:00"}, {"photo_count": 0}, {"photo_count": "x"}):
         with pytest.raises(SettingsError):
             store.update(bad)
+
+
+def test_removed_fit_mode_is_migrated(tmp_path):
+    import json
+    f = tmp_path / "s.json"
+    f.write_text(json.dumps({"image_fit": "none", "photo_count": 4}))
+    s = SettingsStore(f).get()
+    assert s["image_fit"] == "crop" and s["portrait_fit"] == "blur" and s["photo_count"] == 4

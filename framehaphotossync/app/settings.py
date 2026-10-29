@@ -36,7 +36,8 @@ DEFAULTS: dict[str, Any] = {
     "selection": "newest",  # newest | random
     "replace_previous": True,
     "matte": "none",
-    "image_fit": "crop",  # crop | blur | none
+    "image_fit": "crop",  # crop | blur
+    "portrait_fit": "blur",  # crop | blur (applies to portrait photos only)
     "select_first": True,
     "enable_art_mode": False,
 }
@@ -45,7 +46,8 @@ CHOICES = {
     "source_type": ("public", "private"),
     "frequency": ("daily", "weekly", "monthly"),
     "selection": ("newest", "random"),
-    "image_fit": ("crop", "blur", "none"),
+    "image_fit": ("crop", "blur"),
+    "portrait_fit": ("crop", "blur"),
 }
 
 
@@ -104,6 +106,9 @@ class SettingsStore:
                     values[key] = _coerce(key, stored[key])
                 except SettingsError:
                     pass
+        for key, allowed in CHOICES.items():  # e.g. the removed "none" fit mode
+            if values[key] not in allowed:
+                values[key] = DEFAULTS[key]
         return values
 
     def get(self) -> dict[str, Any]:
