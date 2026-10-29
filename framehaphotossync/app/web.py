@@ -87,7 +87,7 @@ def create_app(syncer: Syncer, restrict_to_ingress: bool | None = None) -> Flask
     # -- home assistant ----------------------------------------------------
     @app.get("/api/ha/tvs")
     def ha_tvs():
-        return jsonify(ha.discover_tvs())
+        return jsonify(ha.discovery_info())
 
     # -- TV ----------------------------------------------------------------
     def _tv() -> FrameTV:

@@ -18,7 +18,8 @@ import requests
 
 log = logging.getLogger(__name__)
 
-CONFIG_DIRS = (Path("/homeassistant"), Path("/config"))
+CONFIG_DIRS = (Path("/homeassistant"), Path("/config"), Path("/homeassistant_config"))
+TV_DOMAINS = ("samsungtv", "samsungtvws", "smartthings")
 SUPERVISOR = "http://supervisor"
 
 
@@ -30,31 +31,56 @@ def config_entries_path(dirs=CONFIG_DIRS) -> Path | None:
     return None
 
 
+def _entries(path: Path) -> list[dict[str, Any]]:
+    return json.loads(path.read_text())["data"]["entries"]
+
+
+def _host_of(data: dict[str, Any]) -> str | None:
+    return data.get("host") or data.get("ip_address") or data.get("ip")
+
+
 def discover_tvs(path: Path | None = None) -> list[dict[str, Any]]:
-    path = path or config_entries_path()
+    return discovery_info(path)["tvs"]
+
+
+def discovery_info(path: Path | None = None, dirs=CONFIG_DIRS) -> dict[str, Any]:
+    """TVs found in HA's config entries, plus a human-readable reason if none."""
+    info: dict[str, Any] = {"tvs": [], "reason": ""}
+    path = path or config_entries_path(dirs)
     if not path:
-        return []
+        checked = ", ".join(f"{d} ({'exists' if d.exists() else 'missing'})" for d in dirs)
+        info["reason"] = ("Home Assistant's config folder isn't visible to the add-on "
+                          f"(looked in: {checked}). Reinstall/rebuild the add-on so the "
+                          "'homeassistant_config' mapping is applied.")
+        return info
     try:
-        entries = json.loads(path.read_text())["data"]["entries"]
-    except (OSError, ValueError, KeyError):
+        entries = _entries(path)
+    except (OSError, ValueError, KeyError) as exc:
         log.warning("Could not read Home Assistant config entries", exc_info=True)
-        return []
-    tvs = []
+        info["reason"] = f"Couldn't read {path}: {exc}"
+        return info
     for e in entries:
-        if e.get("domain") != "samsungtv":
-            continue
         data = e.get("data") or {}
-        host = data.get("host")
-        if not host:
+        host = _host_of(data)
+        if e.get("domain") not in TV_DOMAINS or not host:
             continue
-        tvs.append({
+        info["tvs"].append({
             "name": e.get("title") or data.get("name") or host,
             "host": host,
             "mac": data.get("mac"),
             "model": data.get("model"),
             "port": data.get("port"),
+            "integration": e.get("domain"),
         })
-    return tvs
+    if not info["tvs"]:
+        domains = sorted({e.get("domain", "?") for e in entries})
+        has_domain = [e for e in entries if e.get("domain") in TV_DOMAINS]
+        info["reason"] = (
+            f"Read {len(entries)} integrations but none were a Samsung TV with an IP address "
+            + (f"({len(has_domain)} Samsung entries had no host)." if has_domain else
+               f"(integrations present: {', '.join(domains)}).")
+        )
+    return info
 
 
 def timezone():

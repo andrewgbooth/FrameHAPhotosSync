@@ -6,7 +6,7 @@ const NUMERIC = ["weekday", "day_of_month", "photo_count"];
 const CHECKS = ["schedule_enabled", "replace_previous", "select_first", "enable_art_mode"];
 const DEFAULT_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_black",
   "shadowbox_black", "shadowbox_polar", "flexible_polar"];
-let tvName = "", albumName = "", tvs = [], pollTimer = null;
+let tvName = "", albumName = "", tvs = [], tvReason = "", pollTimer = null;
 
 async function api(method, path, body) {
   const res = await fetch("api/" + path, {
@@ -89,6 +89,7 @@ function renderTvSelect() {
     o.value = t.host; o.textContent = `${t.name} (${t.host})`; sel.append(o);
   }
   sel.value = tvs.some((t) => t.host === $("tv_host").value) ? $("tv_host").value : "";
+  $("tv-hint").textContent = tvs.length ? "" : tvReason;
 }
 
 $("tv-select").addEventListener("change", (e) => {
@@ -219,7 +220,7 @@ $("save").onclick = (e) => busy(e.target, "save-result", async () => { await sav
 for (const el of document.querySelectorAll("input[name=source_type], #frequency")) el.addEventListener("change", syncVisibility);
 
 (async function init() {
-  try { tvs = await api("GET", "ha/tvs"); } catch (_) {}
+  try { const d = await api("GET", "ha/tvs"); tvs = d.tvs; tvReason = d.reason; } catch (e) { tvReason = e.message; }
   try {
     applySettings(await api("GET", "settings"));
     const s = readSettings();
