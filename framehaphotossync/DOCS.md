@@ -28,11 +28,16 @@ connection accept the pairing prompt on the TV. The TV must be on or in Art Mode
 
 | Option | Meaning |
 |---|---|
-| Schedule | Daily, weekly or monthly at a chosen time (HA's time zone). Failed runs retry hourly up to 3 times. |
+| Schedule | Daily, weekly or monthly at a chosen time (Home Assistant's time zone). Failed runs retry hourly, up to 3 times. |
 | Photos per sync | How many photos to upload each run. |
 | Choose | *Newest first*, or *Random* (no repeats until the whole album has been shown). |
-| Fit | Crop to fill 16:9, fit over a blurred background, or keep original shape (the matte frames it). Portrait photos are never cropped. |
-| Matte | Frame matte; *Load from TV* lists what your TV supports. |
-| Remove previous | Deletes only photos this add-on uploaded earlier, never your other art. |
+| Landscape / Portrait photos | *Fill screen (smart crop)* or *Fit with blurred edges*. Every photo is output at 16:9 whatever you choose. |
+| Matte | The Frame's matte style; *Load from TV* lists what your TV supports. |
+| Remove previous | Deletes only photos this add-on uploaded earlier, never your other art. Anything the TV fails to delete is retried next sync. |
+| Rotate through My Photos | Sets the TV's own rotation interval (and shuffle) so it cycles through the uploaded photos. |
+| Show newest / Art Mode | Display the newest photo straight away, and switch the TV to Art Mode after syncing. |
 
 *Sync now* always re-uploads. Scheduled runs skip when the newest selection hasn't changed.
+
+*Delete all My Photos from the TV* removes every photo in the TV's My Photos (not Samsung's art
+collection), after confirmation.
