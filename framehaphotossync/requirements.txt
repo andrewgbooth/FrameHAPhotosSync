@@ -5,3 +5,4 @@ pillow>=10.3
 pillow-heif>=0.16
 samsungtvws>=3.0.6
 pyicloud>=2026.10.1
+zeroconf>=0.130

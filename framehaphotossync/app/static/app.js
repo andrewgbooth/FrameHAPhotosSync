@@ -6,7 +6,7 @@ const NUMERIC = ["weekday", "day_of_month", "photo_count"];
 const CHECKS = ["schedule_enabled", "replace_previous", "select_first", "enable_art_mode"];
 const DEFAULT_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_black",
   "shadowbox_black", "shadowbox_polar", "flexible_polar"];
-let tvName = "", albumName = "", tvs = [], tvReason = "", pollTimer = null;
+let tvName = "", albumName = "", tvs = [], tvReason = "", haDevices = [], pollTimer = null;
 
 async function api(method, path, body) {
   const res = await fetch("api/" + path, {
@@ -79,18 +79,38 @@ function syncVisibility() {
 }
 
 // ---- TV ----------------------------------------------------------------
+function tvLabel(t) {
+  const name = t.ha_name || t.name;
+  const tags = [t.frame ? "Frame" : "", t.found_by ? "found by scan" : ""].filter(Boolean).join(", ");
+  return `${name} (${t.host})` + (tags ? ` – ${tags}` : "");
+}
+
 function renderTvSelect() {
   const sel = $("tv-select"); sel.replaceChildren();
   const manual = document.createElement("option");
-  manual.value = ""; manual.textContent = tvs.length ? "Enter IP manually…" : "No TVs found in Home Assistant — enter IP";
+  manual.value = ""; manual.textContent = tvs.length ? "Enter IP manually…" : "No TVs found yet — scan or enter IP";
   sel.append(manual);
   for (const t of tvs) {
     const o = document.createElement("option");
-    o.value = t.host; o.textContent = `${t.name} (${t.host})`; sel.append(o);
+    o.value = t.host; o.textContent = tvLabel(t); sel.append(o);
   }
   sel.value = tvs.some((t) => t.host === $("tv_host").value) ? $("tv_host").value : "";
-  $("tv-hint").textContent = tvs.length ? "" : tvReason;
+  let hint = tvs.length ? "" : tvReason;
+  if (!tvs.length && haDevices.length)
+    hint += ` Home Assistant knows ${haDevices.map((d) => d.name).join(", ")} but not its IP (SmartThings is cloud-based) — press Scan network.`;
+  $("tv-hint").textContent = hint;
 }
+
+$("scan-tv").onclick = (e) => busy(e.target, "tv-result", async () => {
+  const found = await api("POST", "ha/scan");
+  const known = new Set(tvs.map((t) => t.host));
+  tvs = [...tvs, ...found.filter((t) => !known.has(t.host))];
+  for (const f of found) { const t = tvs.find((x) => x.host === f.host); Object.assign(t, f); }
+  const frames = found.filter((t) => t.frame);
+  if (frames.length === 1 && !$("tv_host").value) { $("tv_host").value = frames[0].host; tvName = frames[0].ha_name || frames[0].name; }
+  renderTvSelect();
+  say("tv-result", found.length ? `Found ${found.length} Samsung TV(s) (${frames.length} Frame)` : "No Samsung TVs found. Is the TV on or in Art Mode?", found.length ? "ok" : "error");
+});
 
 $("tv-select").addEventListener("change", (e) => {
   const t = tvs.find((x) => x.host === e.target.value);
@@ -220,7 +240,7 @@ $("save").onclick = (e) => busy(e.target, "save-result", async () => { await sav
 for (const el of document.querySelectorAll("input[name=source_type], #frequency")) el.addEventListener("change", syncVisibility);
 
 (async function init() {
-  try { const d = await api("GET", "ha/tvs"); tvs = d.tvs; tvReason = d.reason; } catch (e) { tvReason = e.message; }
+  try { const d = await api("GET", "ha/tvs"); tvs = d.tvs; tvReason = d.reason; haDevices = d.ha_devices || []; } catch (e) { tvReason = e.message; }
   try {
     applySettings(await api("GET", "settings"));
     const s = readSettings();

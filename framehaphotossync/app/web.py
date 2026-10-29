@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, request, send_from_directory
 
-from . import ha
+from . import ha, netscan
 from .frame import FrameTV
 from .settings import SettingsError
 from .sources import SourceError
@@ -88,6 +88,12 @@ def create_app(syncer: Syncer, restrict_to_ingress: bool | None = None) -> Flask
     @app.get("/api/ha/tvs")
     def ha_tvs():
         return jsonify(ha.discovery_info())
+
+    @app.post("/api/ha/scan")
+    def ha_scan():
+        tvs = netscan.scan()
+        ha.label_scanned(tvs, ha.device_names())
+        return jsonify(tvs)
 
     # -- TV ----------------------------------------------------------------
     def _tv() -> FrameTV:

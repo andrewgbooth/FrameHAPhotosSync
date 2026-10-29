@@ -16,8 +16,12 @@ work. The password is stored in the add-on's private `/data` volume.
 
 ## Samsung Frame TV
 
-TVs already set up with the Home Assistant *Samsung Smart TV* integration appear in a drop-down
-(read from HA's config, so no IP typing). Otherwise enter the IP manually. On the first
+TVs set up with the Home Assistant *Samsung Smart TV* integration appear in the drop-down
+automatically. If your Frame is only in SmartThings (cloud-based, so HA never learns its IP), press
+**Scan network**: the add-on looks for Samsung TVs via UPnP/DLNA (SSDP), mDNS (AirPlay) and a probe
+of your local /24, confirms each one on the TV's own `:8001` API, marks Frames, and labels them with the
+name SmartThings/HA uses. The add-on runs in host-network mode so these multicast scans work.
+Otherwise enter the IP manually. On the first
 connection accept the pairing prompt on the TV. The TV must be on or in Art Mode, not fully off.
 
 ## Options

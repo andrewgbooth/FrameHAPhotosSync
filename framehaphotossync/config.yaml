@@ -1,5 +1,5 @@
 name: Frame Photos Sync
-version: "0.1.1"
+version: "0.2.0"
 slug: framehaphotossync
 description: Sync iCloud shared album photos to a Samsung Frame TV as art, on a schedule.
 url: https://github.com/andrewgbooth/framehaphotossync
@@ -10,6 +10,7 @@ init: false
 startup: application
 boot: auto
 ingress: true
+host_network: true
 ingress_port: 8099
 panel_icon: mdi:image-frame
 panel_title: Frame Photos
