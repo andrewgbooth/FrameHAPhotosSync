@@ -80,7 +80,7 @@ def syncer(tmp_path, monkeypatch):
     s = Syncer(settings, StateStore(tmp_path / "state.json"), ZoneInfo("UTC"),
                data_dir=tmp_path, frame_factory=FakeTV)
     s.album = make_photos(6)
-    monkeypatch.setattr(Syncer, "photos", lambda self, refresh=False: self.album)
+    monkeypatch.setattr(Syncer, "photos", lambda self, refresh=False, stale_ok=False: self.album)
     return s
 
 
@@ -196,3 +196,37 @@ def test_ingress_restriction(syncer):
     c = app.test_client()
     assert c.get("/api/status", environ_overrides={"REMOTE_ADDR": "192.168.1.9"}).status_code == 403
     assert c.get("/api/status", environ_overrides={"REMOTE_ADDR": "172.30.32.2"}).status_code == 200
+
+
+def test_preview_always_includes_photos_on_the_tv_first(syncer, client):
+    syncer.album = make_photos(60)  # newest first: p59 ... p0
+    syncer.settings.update({"selection": "random", "photo_count": 3})
+    syncer.state.set(uploaded=[{"photo_id": "p2", "content_id": "A"}, {"photo_id": "p40", "content_id": "B"},
+                               {"photo_id": "gone", "content_id": "C"}])
+    r = client.get("/api/photos").json
+    ids = [p["id"] for p in r["photos"]]
+    assert ids[:2] == ["p40", "p2"] and all(p["on_tv"] for p in r["photos"][:2])  # old photo p2 still shown
+    assert ids[2] == "p59" and len(ids) == 2 + 24 and not any(p["on_tv"] for p in r["photos"][2:])
+    assert r["total"] == 60 and r["on_tv"] == 2 and r["missing_on_tv"] == 1
+
+
+def test_sync_precaches_thumbnails_for_what_it_sent(syncer):
+    syncer.run("manual")
+    for pid in ("p5", "p4", "p3"):
+        assert syncer._thumb_path(pid).exists()
+    assert max(Image.open(syncer._thumb_path("p5")).size) <= 240
+    assert not syncer._thumb_path("p0").exists()
+
+
+def test_thumb_is_generated_once_for_concurrent_requests(syncer):
+    import threading
+    calls = []
+    def slow_fetch(kind):
+        calls.append(kind)
+        import time; time.sleep(0.2)
+        return jpeg()
+    syncer.album = [Photo(id="x", taken=None, fetch=slow_fetch)]
+    out = []
+    ts = [threading.Thread(target=lambda: out.append(syncer.thumb("x"))) for _ in range(5)]
+    [t.start() for t in ts]; [t.join() for t in ts]
+    assert len(out) == 5 and calls == ["thumb"]

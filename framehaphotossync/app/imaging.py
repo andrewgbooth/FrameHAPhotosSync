@@ -131,7 +131,17 @@ def prepare_for_tv(data: bytes, fit: str = "crop", portrait_fit: str = "blur") -
     return encode_capped(out)
 
 
-def thumbnail(data: bytes, size: int = 360) -> bytes:
-    img = _open(data)
-    img.thumbnail((size, size), Image.LANCZOS)
-    return _jpeg(img, 80)
+THUMB_SIZE = 240  # grid cells are ~120-200px wide; this stays sharp on 2x screens
+
+
+def thumbnail(data: bytes, size: int = THUMB_SIZE) -> bytes:
+    """Small preview JPEG. Decodes at reduced size (JPEG draft mode) so big photos are cheap."""
+    img = Image.open(io.BytesIO(data))
+    icc = img.info.get("icc_profile")
+    img.draft("RGB", (size * 2, size * 2))  # no-op for non-JPEG; lets libjpeg shrink on decode
+    img = ImageOps.exif_transpose(img).convert("RGB")
+    img.thumbnail((size, size), Image.BILINEAR)
+    if icc:
+        img.info["icc_profile"] = icc
+        img = _to_srgb(img)
+    return _jpeg(img, 72)

@@ -130,8 +130,8 @@ class PublicAlbum:
 
 
 def _pick_thumb(sized: list[tuple[int, str]]) -> str:
-    """Smallest derivative that is still decent for a preview (>= ~300px wide area)."""
+    """Smallest derivative that is still decent for a preview (>= ~250x170 pixels)."""
     for area, checksum in sized:
-        if area >= 300 * 200:
+        if area >= 250 * 170:
             return checksum
     return sized[-1][1]

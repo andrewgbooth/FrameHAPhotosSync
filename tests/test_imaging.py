@@ -82,8 +82,15 @@ def test_smart_crop_keeps_the_detailed_region():
     assert ImageStat.Stat(out.convert("L").resize((64, 36))).mean[0] > 150
 
 
-def test_thumbnail():
-    assert max(Image.open(io.BytesIO(thumbnail(jpeg(3000, 2000)))).size) == 360
+def test_thumbnail_is_small_and_oriented():
+    data = thumbnail(jpeg(6000, 4000))
+    assert max(Image.open(io.BytesIO(data)).size) == 240 and len(data) < 15_000
+    img = Image.new("RGB", (400, 200), "white")
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    b = io.BytesIO()
+    img.save(b, "JPEG", exif=exif)
+    assert Image.open(io.BytesIO(thumbnail(b.getvalue()))).size[0] < Image.open(io.BytesIO(thumbnail(b.getvalue()))).size[1]
 
 
 def test_alpha_png_flattened():

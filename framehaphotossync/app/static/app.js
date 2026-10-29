@@ -231,7 +231,10 @@ async function loadPreview(refresh) {
   info.textContent = "Loading…"; grid.replaceChildren();
   try {
     const r = await api("GET", "photos" + (refresh ? "?refresh=1" : ""));
-    info.textContent = `${r.total} photo(s) in the album — showing the latest ${r.photos.length}.`;
+    const latest = r.photos.length - r.on_tv;
+    info.textContent = `${r.total} photo(s) in the album. ` +
+      (r.on_tv ? `${r.on_tv} on the TV shown first, then the latest ${latest}.` : `Showing the latest ${latest}.`) +
+      (r.missing_on_tv ? ` (${r.missing_on_tv} sent earlier are no longer in the album.)` : "");
     for (const p of r.photos) {
       const d = document.createElement("div"); d.className = "photo"; d.dataset.id = p.id;
       const img = document.createElement("img"); img.loading = "lazy"; img.alt = p.caption || "";

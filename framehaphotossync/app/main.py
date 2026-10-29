@@ -18,7 +18,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     syncer = Syncer(SettingsStore(), StateStore(), ha.timezone())
     threading.Thread(target=syncer.scheduler_loop, daemon=True, name="scheduler").start()
-    serve(create_app(syncer), host="0.0.0.0", port=8099, threads=6)
+    serve(create_app(syncer), host="0.0.0.0", port=8099, threads=12)
 
 
 if __name__ == "__main__":

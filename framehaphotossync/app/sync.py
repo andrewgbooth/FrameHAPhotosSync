@@ -7,6 +7,7 @@ import logging
 import random
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -36,7 +37,9 @@ class Syncer:
         self.frame_factory = frame_factory
         self.private = PrivateICloud(data_dir / "icloud")
         self._run_lock = threading.Lock()
-        self._cache_lock = threading.Lock()
+        self._cache_lock = threading.RLock()
+        self._thumb_locks: dict[str, threading.Lock] = {}
+        self._warm_pool = ThreadPoolExecutor(max_workers=6, thread_name_prefix="thumbs")
         self._photos: tuple[tuple, float, list[Photo]] | None = None
         self.next_run: datetime | None = None
         self._retries = 0
@@ -47,12 +50,15 @@ class Syncer:
     def _source_key(self, s: dict[str, Any]) -> tuple:
         return (s["source_type"], s["public_url"], s["icloud_apple_id"], s["private_album_id"])
 
-    def photos(self, refresh: bool = False) -> list[Photo]:
+    def photos(self, refresh: bool = False, stale_ok: bool = False) -> list[Photo]:
+        """The album, newest first. ``stale_ok`` accepts an expired cache (for thumbnails,
+        which only need the download links and shouldn't re-list a big album)."""
         s = self.settings.get()
         key = self._source_key(s)
         with self._cache_lock:
             c = self._photos
-            if c and not refresh and c[0] == key and time.time() - c[1] < PHOTO_CACHE_TTL:
+            if c and not refresh and c[0] == key and (
+                    stale_ok or time.time() - c[1] < PHOTO_CACHE_TTL):
                 return c[2]
             if s["source_type"] == "public":
                 photos = PublicAlbum(s["public_url"]).photos()
@@ -64,18 +70,48 @@ class Syncer:
             self._photos = (key, time.time(), photos)
             return photos
 
+    def _thumb_path(self, photo_id: str) -> Path:
+        d = self.data_dir / "cache" / "thumbs"
+        d.mkdir(parents=True, exist_ok=True)
+        return d / (hashlib.sha256(photo_id.encode()).hexdigest()[:40] + ".jpg")
+
+    def _thumb_lock(self, photo_id: str) -> threading.Lock:
+        with self._cache_lock:
+            return self._thumb_locks.setdefault(photo_id, threading.Lock())
+
     def thumb(self, photo_id: str) -> bytes:
-        cache = self.data_dir / "cache" / "thumbs"
-        cache.mkdir(parents=True, exist_ok=True)
-        f = cache / (hashlib.sha256(photo_id.encode()).hexdigest()[:40] + ".jpg")
+        f = self._thumb_path(photo_id)
         if f.exists():
             return f.read_bytes()
-        photo = next((p for p in self.photos() if p.id == photo_id), None)
-        if photo is None:
-            raise SourceError("Photo not found.")
-        data = imaging.thumbnail(photo.fetch("thumb"))
-        f.write_bytes(data)
-        return data
+        with self._thumb_lock(photo_id):  # concurrent requests for one photo share the work
+            if f.exists():
+                return f.read_bytes()
+            photo = next((p for p in self.photos(stale_ok=True) if p.id == photo_id), None)
+            if photo is None:
+                raise SourceError("Photo not found.")
+            data = imaging.thumbnail(photo.fetch("thumb"))
+            f.write_bytes(data)
+            return data
+
+    def store_thumb(self, photo_id: str, full_image: bytes) -> None:
+        """Make a preview from a photo we already downloaded (no extra network traffic)."""
+        try:
+            self._thumb_path(photo_id).write_bytes(imaging.thumbnail(full_image))
+        except Exception:
+            log.debug("Could not store thumbnail", exc_info=True)
+
+    def warm_thumbs(self, photo_ids: list[str]) -> None:
+        """Generate missing thumbnails in the background, several at a time."""
+        def one(pid: str) -> None:
+            try:
+                self.thumb(pid)
+            except Exception:
+                log.debug("thumb warm-up failed for %s", pid, exc_info=True)
+
+        todo = [i for i in photo_ids if not self._thumb_path(i).exists()]
+        if todo:
+            threading.Thread(target=lambda: list(self._warm_pool.map(one, todo)),
+                             daemon=True).start()
 
     def invalidate(self) -> None:
         with self._cache_lock:
@@ -150,8 +186,10 @@ class Syncer:
         ids: list[str] = []
         for p in chosen:
             try:
-                images.append(imaging.prepare_for_tv(p.fetch("full"), s["image_fit"], s["portrait_fit"]))
+                full = p.fetch("full")
+                images.append(imaging.prepare_for_tv(full, s["image_fit"], s["portrait_fit"]))
                 ids.append(p.id)
+                self.store_thumb(p.id, full)  # instant preview of what's on the TV
             except Exception as exc:
                 self.state.log(f"Skipped a photo: {exc}", "warning")
         if not images:

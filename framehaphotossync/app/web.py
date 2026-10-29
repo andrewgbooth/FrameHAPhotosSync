@@ -155,18 +155,25 @@ def create_app(syncer: Syncer, restrict_to_ingress: bool | None = None) -> Flask
     def photos():
         refresh = request.args.get("refresh") == "1"
         items = syncer.photos(refresh=refresh)
-        on_tv = {u["photo_id"] for u in syncer.state.snapshot().get("uploaded", [])}
+        sent = [u["photo_id"] for u in syncer.state.snapshot().get("uploaded", [])]
+        sent_set = set(sent)
+        # everything currently on the TV first (so it's always shown), then the latest others
+        on_tv = [p for p in items if p.id in sent_set]
+        latest = [p for p in items if p.id not in sent_set][:PREVIEW_COUNT]
+        shown = on_tv + latest
+        syncer.warm_thumbs([p.id for p in shown])
         return jsonify(
             total=len(items),
+            on_tv=len(on_tv),
+            missing_on_tv=len(sent_set) - len(on_tv),  # sent earlier, since removed from the album
             photos=[{"id": p.id, "taken": p.taken.isoformat() if p.taken else None,
-                     "caption": p.caption, "on_tv": p.id in on_tv}
-                    for p in items[:PREVIEW_COUNT]],
+                     "caption": p.caption, "on_tv": p.id in sent_set} for p in shown],
         )
 
     @app.get("/api/thumb")
     def thumb():
         data = syncer.thumb(request.args.get("id", ""))
         return Response(data, mimetype="image/jpeg",
-                        headers={"Cache-Control": "private, max-age=86400"})
+                        headers={"Cache-Control": "private, max-age=604800"})
 
     return app
