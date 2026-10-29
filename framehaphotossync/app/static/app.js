@@ -1,9 +1,9 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const FIELDS = ["public_url", "icloud_apple_id", "icloud_password", "tv_host", "time", "frequency",
-  "weekday", "day_of_month", "photo_count", "selection", "image_fit", "portrait_fit", "matte"];
-const NUMERIC = ["weekday", "day_of_month", "photo_count"];
-const CHECKS = ["schedule_enabled", "replace_previous", "select_first", "enable_art_mode"];
+  "weekday", "day_of_month", "photo_count", "selection", "image_fit", "portrait_fit", "matte", "slideshow_minutes"];
+const NUMERIC = ["weekday", "day_of_month", "photo_count", "slideshow_minutes"];
+const CHECKS = ["schedule_enabled", "replace_previous", "select_first", "enable_art_mode", "slideshow_shuffle"];
 const DEFAULT_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_black",
   "shadowbox_black", "shadowbox_polar", "flexible_polar"];
 let tvName = "", albumName = "", tvs = [], tvReason = "", haDevices = [], pollTimer = null;
@@ -130,6 +130,16 @@ $("load-mattes").onclick = (e) => busy(e.target, "save-result", async () => {
   fillSelect($("matte"), m, $("matte").value);
   say("save-result", `Loaded ${m.length} mattes`, "ok");
 });
+
+$("clear-tv").onclick = (e) => {
+  if (!confirm("Delete ALL photos in the TV's My Photos? This can't be undone.")) return;
+  busy(e.target, "clear-result", async () => {
+    await save(true);
+    const r = await api("POST", "tv/clear", { confirm: true });
+    say("clear-result", r.remaining ? `Deleted ${r.deleted}; ${r.remaining} could not be removed.` : `Deleted ${r.deleted} photo(s) ✓`, r.remaining ? "error" : "ok");
+    refreshStatus();
+  });
+};
 
 // ---- iCloud ------------------------------------------------------------
 function setAlbums(albums, current) {

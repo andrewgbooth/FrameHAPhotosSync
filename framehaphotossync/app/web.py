@@ -104,6 +104,16 @@ def create_app(syncer: Syncer, restrict_to_ingress: bool | None = None) -> Flask
     def tv_test():
         return jsonify(_tv().test())
 
+    @app.post("/api/tv/clear")
+    def tv_clear():
+        if (request.get_json(silent=True) or {}).get("confirm") is not True:
+            return jsonify(error="Confirmation required."), 400
+        deleted, left, err = _tv().clear_my_photos()
+        syncer.state.set(uploaded=[], pending_delete=left)
+        syncer.state.log(f"Cleared {deleted} photo(s) from the TV's My Photos"
+                         + (f"; {len(left)} could not be removed ({err})" if left else "."))
+        return jsonify(deleted=deleted, remaining=len(left), error=err)
+
     @app.get("/api/tv/mattes")
     def tv_mattes():
         return jsonify(_tv().mattes())

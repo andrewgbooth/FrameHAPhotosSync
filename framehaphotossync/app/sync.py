@@ -158,11 +158,43 @@ class Syncer:
             raise SourceError("None of the selected photos could be downloaded.")
 
         self.state.log(f"Uploading {len(images)} photo(s) to {s['tv_name'] or s['tv_host']}…")
-        delete = [u["content_id"] for u in prev] if s["replace_previous"] else []
-        new = tv.apply(images, s["matte"], delete, s["select_first"], s["enable_art_mode"])
-        kept = [] if s["replace_previous"] else prev
-        self.state.set(uploaded=kept + [{"photo_id": i, "content_id": c} for i, c in zip(ids, new)])
-        return f"Uploaded {len(new)} photo(s)" + (f", removed {len(delete)} old." if delete else ".")
+        snap = self.state.snapshot()
+        prev_ids = [u["content_id"] for u in snap.get("uploaded", [])]
+        pending = list(snap.get("pending_delete", []))
+        fresh: list[str] = []
+        try:
+            new = tv.upload_all(images, s["matte"], on_uploaded=fresh.append)
+        except Exception:
+            # remember anything that did get onto the TV so it is cleaned up next time
+            self.state.set(pending_delete=sorted(set(pending) | set(fresh)))
+            raise
+        uploaded = [{"photo_id": i, "content_id": c} for i, c in zip(ids, new)]
+        replace = s["replace_previous"]
+        # save progress straight away so a later failure can never lose track of anything
+        self.state.set(
+            uploaded=uploaded if replace else snap.get("uploaded", []) + uploaded,
+            pending_delete=sorted(set(pending) | (set(prev_ids) if replace else set())),
+        )
+
+        removed_msg = ""
+        if replace:
+            doomed = self.state.snapshot().get("pending_delete", [])
+            if doomed:
+                deleted, remaining, err = tv.delete(doomed)
+                self.state.set(pending_delete=remaining)
+                if deleted:
+                    removed_msg = f", removed {len(deleted)} old"
+                if remaining:
+                    self.state.log(
+                        f"Couldn't remove {len(remaining)} old photo(s) from the TV"
+                        f"{' (' + err + ')' if err else ''}; will retry next sync.", "warning")
+                    removed_msg += f", {len(remaining)} old photo(s) could not be removed"
+
+        for level, note in tv.show(new[0] if new and s["select_first"] else None,
+                                   s["slideshow_minutes"], s["slideshow_shuffle"],
+                                   s["enable_art_mode"]):
+            self.state.log(note, level)
+        return f"Uploaded {len(new)} photo(s){removed_msg}."
 
     # -- scheduling --------------------------------------------------------
     def reschedule(self, failed: bool = False) -> None:

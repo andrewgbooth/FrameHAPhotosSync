@@ -5,12 +5,16 @@ from __future__ import annotations
 import logging
 import secrets
 import socket
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .sources import SourceError
 
 log = logging.getLogger(__name__)
+
+MY_PHOTOS = "MY-C0002"
+SETTLE_SECONDS = 2
 
 FALLBACK_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_black",
                    "shadowbox_black", "shadowbox_polar", "flexible_polar"]
@@ -98,30 +102,109 @@ class FrameTV:
 
     def uploaded_ids(self) -> set[str]:
         try:
-            return {i["content_id"] for i in self._art().available() if "content_id" in i}
+            return _ids(self._art())
         except Exception as exc:
             raise self._wrap(exc) from exc
 
-    def apply(self, images: list[bytes], matte: str, delete_ids: list[str],
-              select_first: bool, enable_art_mode: bool) -> list[str]:
-        """Upload 3840x2160 JPEGs; returns the new content ids."""
+    def upload_all(self, images: list[bytes], matte: str,
+                   on_uploaded: Callable[[str], None] | None = None) -> list[str]:
+        """Upload 3840x2160 JPEGs; returns the new content ids.
+
+        ``on_uploaded`` is called with each id as soon as it exists so a failure part-way
+        through doesn't lose track of what is already on the TV.
+        """
         try:
             art = self._art()
-            new_ids: list[str] = []
+            ids: list[str] = []
             for data in images:
                 m = matte or "none"
-                new_ids.append(art.upload(data, matte=m, portrait_matte=m, file_type="jpg"))
-            if delete_ids:
-                existing = {i["content_id"] for i in art.available() if "content_id" in i}
-                stale = [c for c in delete_ids if c in existing]
-                if stale:
-                    art.delete_list(stale)
-            if select_first and new_ids:
-                art.select_image(new_ids[0], show=True)
-            if enable_art_mode:
-                art.set_artmode(True)
-            return new_ids
+                cid = art.upload(data, matte=m, portrait_matte=m, file_type="jpg")
+                ids.append(cid)
+                if on_uploaded:
+                    on_uploaded(cid)
+            return ids
         except SourceError:
             raise
         except Exception as exc:
             raise self._wrap(exc) from exc
+
+    def delete(self, content_ids: list[str]) -> tuple[list[str], list[str], str]:
+        """Delete photos; returns (deleted, still_on_tv, error_text).
+
+        Never raises. Success is judged by re-listing the TV, not by the delete reply
+        (which differs between firmwares).
+        """
+        ids = list(dict.fromkeys(content_ids))
+        if not ids:
+            return [], [], ""
+        errors: list[str] = []
+        try:
+            art = self._art()
+            time.sleep(SETTLE_SECONDS)
+            present = [i for i in ids if i in _ids(art)]
+            if present:
+                try:
+                    art.delete_list(present)
+                except Exception as exc:
+                    errors.append(f"bulk delete: {type(exc).__name__}: {exc}")
+                present = [i for i in present if i in _ids(art)]
+            for cid in list(present):  # one at a time for anything that survived
+                try:
+                    art.delete(cid)
+                except Exception as exc:
+                    errors.append(f"{cid}: {type(exc).__name__}: {exc}")
+            if present:
+                present = [i for i in present if i in _ids(art)]
+        except Exception as exc:
+            return [], ids, f"{type(exc).__name__}: {exc}"
+        return [i for i in ids if i not in present], present, "; ".join(errors[:3])
+
+    def clear_my_photos(self) -> tuple[int, list[str], str]:
+        """Delete every user-uploaded photo ("MY_F…") from the TV. Returns (deleted, left, error)."""
+        try:
+            mine = sorted(i for i in _ids(self._art()) if i.startswith("MY_F"))
+        except Exception as exc:
+            raise self._wrap(exc) from exc
+        deleted, left, err = self.delete(mine)
+        return len(deleted), left, err
+
+    def show(self, first_id: str | None, slideshow_minutes: int, shuffle: bool,
+             art_mode: bool) -> list[tuple[str, str]]:
+        """Make the TV actually use the photos. Returns (level, message) notes; never raises."""
+        notes: list[tuple[str, str]] = []
+        try:
+            art = self._art()
+        except Exception as exc:
+            return [("warning", f"Couldn't reconnect to the TV to apply display settings: {exc}")]
+        if slideshow_minutes > 0:
+            notes.append(self._set_rotation(art, slideshow_minutes, shuffle))
+        if first_id:
+            try:
+                art.select_image(first_id, show=True)
+                notes.append(("info", "Showing the newest photo now."))
+            except Exception as exc:
+                notes.append(("warning", f"Couldn't switch to the new photo: {exc}"))
+        if art_mode:
+            try:
+                art.set_artmode(True)
+            except Exception as exc:
+                notes.append(("warning", f"Couldn't switch the TV to Art Mode: {exc}"))
+        return notes
+
+    @staticmethod
+    def _set_rotation(art, minutes: int, shuffle: bool) -> tuple[str, str]:
+        """Rotate the 'My Photos' category. Newer TVs use auto-rotation, older ones slideshow."""
+        errors = []
+        for name in ("set_auto_rotation_status", "set_slideshow_status"):
+            try:
+                getattr(art, name)(duration=minutes, type=shuffle, category_id=MY_PHOTOS)
+                every = f"{minutes} min" if minutes < 60 else f"{minutes / 60:g} h"
+                return ("info", f"TV set to rotate through My Photos every {every}"
+                                f"{' (shuffled)' if shuffle else ''}.")
+            except Exception as exc:
+                errors.append(f"{name}: {exc}")
+        return ("warning", "Couldn't set the TV's photo rotation (" + "; ".join(errors) + ").")
+
+
+def _ids(art) -> set[str]:
+    return {i["content_id"] for i in art.available() if isinstance(i, dict) and "content_id" in i}

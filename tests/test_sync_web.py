@@ -26,21 +26,45 @@ def make_photos(n):
 
 class FakeTV:
     instances = []
+    fail_delete = False
+    fail_upload_after = None
+    counter = 0
 
     def __init__(self, host, token_file, port=8002):
         if not host:
             raise SourceError("No TV selected.")
         self.host = host
-        self.applied = []
+        self.uploaded, self.deleted, self.shown = [], [], []
         FakeTV.instances.append(self)
 
-    def apply(self, images, matte, delete_ids, select_first, enable_art_mode):
-        self.applied.append((len(images), matte, list(delete_ids), select_first, enable_art_mode))
-        n = sum(len(i.applied) for i in FakeTV.instances)
-        return [f"MY_F{n}_{i}" for i in range(len(images))]
+    def upload_all(self, images, matte, on_uploaded=None):
+        ids = []
+        for n, _ in enumerate(images):
+            if FakeTV.fail_upload_after is not None and n >= FakeTV.fail_upload_after:
+                raise SourceError("TV dropped the connection")
+            FakeTV.counter += 1
+            cid = f"MY_F{FakeTV.counter:04d}"
+            ids.append(cid)
+            if on_uploaded:
+                on_uploaded(cid)
+        self.uploaded.append((len(images), matte))
+        return ids
+
+    def delete(self, ids):
+        self.deleted.append(list(ids))
+        if FakeTV.fail_delete:
+            return [], list(ids), "bulk delete: ResponseError"
+        return list(ids), [], ""
+
+    def show(self, first_id, minutes, shuffle, art_mode):
+        self.shown.append((first_id, minutes, shuffle, art_mode))
+        return [("info", "TV set to rotate through My Photos every 15 min (shuffled).")]
+
+    def clear_my_photos(self):
+        return 3, [], ""
 
     def test(self):
-        return {"ok": True, "api_version": "4.3.4.0", "artmode": "on"}
+        return {"ok": True, "api_version": "4.3.4.0", "artmode": "on", "client_name": "X"}
 
     def mattes(self):
         return ["none", "shadowbox_polar"]
@@ -49,6 +73,7 @@ class FakeTV:
 @pytest.fixture
 def syncer(tmp_path, monkeypatch):
     FakeTV.instances.clear()
+    FakeTV.fail_delete, FakeTV.fail_upload_after, FakeTV.counter = False, None, 0
     settings = SettingsStore(tmp_path / "settings.json")
     settings.update({"tv_host": "10.0.0.5", "tv_name": "Frame", "photo_count": 3,
                      "public_url": "B0abcdefgh", "matte": "shadowbox_polar"})
@@ -63,17 +88,53 @@ def test_sync_uploads_newest_then_skips_when_unchanged_then_replaces(syncer):
     assert syncer.run("manual")
     st = syncer.state.snapshot()
     assert st["last_status"] == "ok" and [u["photo_id"] for u in st["uploaded"]] == ["p5", "p4", "p3"]
-    assert FakeTV.instances[-1].applied[0][:2] == (3, "shadowbox_polar")
+    tv = FakeTV.instances[-1]
+    assert tv.uploaded == [(3, "shadowbox_polar")] and tv.deleted == []
+    assert tv.shown == [("MY_F0001", 15, True, True)]  # newest shown, rotation set, art mode on
+    first_ids = [u["content_id"] for u in st["uploaded"]]
 
     syncer.run("schedule")  # nothing changed
     assert "No new photos" in syncer.state.snapshot()["last_message"]
-    assert len(FakeTV.instances[-1].applied) == 0  # new TV instance made, nothing applied
+    assert FakeTV.instances[-1].uploaded == []
 
     syncer.album = make_photos(7)  # a new photo arrives
     syncer.run("schedule")
     tv = FakeTV.instances[-1]
-    assert tv.applied[0][2] == [u["content_id"] for u in st["uploaded"]]  # old ones deleted
-    assert [u["photo_id"] for u in syncer.state.snapshot()["uploaded"]] == ["p6", "p5", "p4"]
+    assert tv.deleted == [first_ids]  # old ones deleted after the new upload
+    st = syncer.state.snapshot()
+    assert [u["photo_id"] for u in st["uploaded"]] == ["p6", "p5", "p4"]
+    assert st["pending_delete"] == [] and "removed 3 old" in st["last_message"]
+
+
+def test_failed_delete_is_reported_and_retried_next_sync(syncer):
+    syncer.run("manual")
+    first = [u["content_id"] for u in syncer.state.snapshot()["uploaded"]]
+    FakeTV.fail_delete = True
+    syncer.album = make_photos(8)
+    assert syncer.run("schedule")  # the sync itself still succeeds
+    st = syncer.state.snapshot()
+    assert st["pending_delete"] == sorted(first) and "could not be removed" in st["last_message"]
+    assert any(l["level"] == "warning" and "retry" in l["msg"] for l in st["log"])
+    assert [u["photo_id"] for u in st["uploaded"]] == ["p7", "p6", "p5"]  # new set is tracked
+
+    FakeTV.fail_delete = False
+    syncer.album = make_photos(9)
+    syncer.run("schedule")
+    st = syncer.state.snapshot()
+    third_batch_prev = FakeTV.instances[-1].deleted[0]
+    assert set(first) <= set(third_batch_prev) and len(third_batch_prev) == 6  # old backlog + previous set
+    assert st["pending_delete"] == []
+
+
+def test_partial_upload_failure_is_remembered_for_cleanup(syncer):
+    FakeTV.fail_upload_after = 2
+    assert syncer.run("manual") is False
+    st = syncer.state.snapshot()
+    assert st["last_status"] == "error" and st["pending_delete"] == ["MY_F0001", "MY_F0002"]
+    FakeTV.fail_upload_after = None
+    syncer.run("manual")
+    assert FakeTV.instances[-1].deleted == [["MY_F0001", "MY_F0002"]]
+    assert syncer.state.snapshot()["pending_delete"] == []
 
 
 def test_random_selection_avoids_repeats_until_exhausted(syncer):
@@ -125,6 +186,8 @@ def test_api_status_sync_photos_tv(client, syncer):
     assert client.get("/api/thumb?id=p5").mimetype == "image/jpeg"
     assert client.post("/api/tv/test").json["ok"]
     assert client.get("/api/tv/mattes").json == ["none", "shadowbox_polar"]
+    assert client.post("/api/tv/clear", json={}).status_code == 400
+    assert client.post("/api/tv/clear", json={"confirm": True}).json["deleted"] == 3
     assert client.get("/").status_code == 200 and client.get("/static/app.js").status_code == 200
 
 
