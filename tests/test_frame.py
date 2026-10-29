@@ -20,8 +20,10 @@ class FakeArt:
         self.ids = set(ids)
         self.bulk_works, self.single_works, self.rotation = bulk_works, single_works, rotation
         self.calls = []
+        self.listings = 0
 
     def available(self, category=None):
+        self.listings += 1
         return [{"content_id": i} for i in sorted(self.ids)] + [{"content_id": "ART_STORE1"}]
 
     def delete_list(self, ids):
@@ -103,3 +105,11 @@ def test_clear_only_touches_my_photos(tv, monkeypatch):
     art = use(tv, monkeypatch, FakeArt(["MY_F1", "MY_F2"], bulk_works=True))
     assert tv.clear_my_photos() == (2, [], "")
     assert {i["content_id"] for i in art.available()} == {"ART_STORE1"}
+
+
+def test_delete_lists_the_tv_library_a_constant_number_of_times(tv, monkeypatch):
+    ids = [f"MY_F{i}" for i in range(12)]
+    art = use(tv, monkeypatch, FakeArt(ids))  # bulk delete ignored -> per-item fallback
+    deleted, left, _ = tv.delete(ids)
+    assert len(deleted) == 12 and left == []
+    assert art.listings <= 3  # was ~one listing per photo per check

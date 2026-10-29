@@ -80,7 +80,7 @@ def syncer(tmp_path, monkeypatch):
     s = Syncer(settings, StateStore(tmp_path / "state.json"), ZoneInfo("UTC"),
                data_dir=tmp_path, frame_factory=FakeTV)
     s.album = make_photos(6)
-    monkeypatch.setattr(Syncer, "photos", lambda self, refresh=False, stale_ok=False: self.album)
+    monkeypatch.setattr(Syncer, "photos", lambda self, refresh=False, stale_ok=False, max_age=None: self.album)
     return s
 
 
@@ -230,3 +230,20 @@ def test_thumb_is_generated_once_for_concurrent_requests(syncer):
     ts = [threading.Thread(target=lambda: out.append(syncer.thumb("x"))) for _ in range(5)]
     [t.start() for t in ts]; [t.join() for t in ts]
     assert len(out) == 5 and calls == ["thumb"]
+
+
+def test_sync_logs_timing_and_reports_progress(syncer):
+    syncer.run("manual")
+    st = syncer.state.snapshot()
+    timing = [l["msg"] for l in st["log"] if l["msg"].startswith("Timing:")]
+    assert timing and all(k in timing[0] for k in ("album", "download+prepare", "upload", "display"))
+
+
+def test_photos_prepared_in_album_order_even_when_one_fails(syncer):
+    def boom(kind):
+        raise SourceError("download failed")
+    syncer.album[1] = Photo(id="p4", taken=None, fetch=boom)  # second-newest
+    syncer.run("manual")
+    st = syncer.state.snapshot()
+    assert [u["photo_id"] for u in st["uploaded"]] == ["p5", "p3"]  # p4 skipped, order kept
+    assert any("Skipped a photo" in l["msg"] for l in st["log"])

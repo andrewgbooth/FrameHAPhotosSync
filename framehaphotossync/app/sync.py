@@ -24,6 +24,7 @@ from .state import StateStore
 log = logging.getLogger(__name__)
 
 PHOTO_CACHE_TTL = 300
+PREPARE_WORKERS = 2  # photos downloaded/prepared at once (each needs ~100 MB while decoding)
 RETRY_DELAY = timedelta(hours=1)
 MAX_RETRIES = 3
 
@@ -50,13 +51,17 @@ class Syncer:
     def _source_key(self, s: dict[str, Any]) -> tuple:
         return (s["source_type"], s["public_url"], s["icloud_apple_id"], s["private_album_id"])
 
-    def photos(self, refresh: bool = False, stale_ok: bool = False) -> list[Photo]:
+    def photos(self, refresh: bool = False, stale_ok: bool = False,
+               max_age: float | None = None) -> list[Photo]:
         """The album, newest first. ``stale_ok`` accepts an expired cache (for thumbnails,
-        which only need the download links and shouldn't re-list a big album)."""
+        which only need the download links and shouldn't re-list a big album); ``max_age``
+        accepts a listing no older than that many seconds even when ``refresh`` is set."""
         s = self.settings.get()
         key = self._source_key(s)
         with self._cache_lock:
             c = self._photos
+            if c and c[0] == key and max_age and time.time() - c[1] < max_age:
+                return c[2]  # listed moments ago (e.g. by the preview): don't list again
             if c and not refresh and c[0] == key and (
                     stale_ok or time.time() - c[1] < PHOTO_CACHE_TTL):
                 return c[2]
@@ -94,7 +99,7 @@ class Syncer:
             return data
 
     def store_thumb(self, photo_id: str, full_image: bytes) -> None:
-        """Make a preview from a photo we already downloaded (no extra network traffic)."""
+        """Make a preview from an image we already have (no extra network traffic)."""
         try:
             self._thumb_path(photo_id).write_bytes(imaging.thumbnail(full_image))
         except Exception:
@@ -173,7 +178,11 @@ class Syncer:
     def _sync(self, force: bool) -> str:
         s = self.settings.get()
         tv = self.frame_factory(s["tv_host"], self.data_dir / "tv_token", s["tv_port"])
-        photos = self.photos(refresh=True)
+        timings: dict[str, float] = {}
+        t0 = time.monotonic()
+        self.state.set(last_message="Reading the album…")
+        photos = self.photos(refresh=True, max_age=60)
+        timings["album"] = time.monotonic() - t0
         if not photos:
             raise SourceError("The album has no photos.")
         chosen = self.choose(photos, s)
@@ -182,16 +191,26 @@ class Syncer:
                 and [u["photo_id"] for u in prev] == [p.id for p in chosen]):
             return "No new photos; the TV is already up to date."
 
-        images: list[bytes] = []
-        ids: list[str] = []
-        for p in chosen:
+        t0 = time.monotonic()
+        total, done = len(chosen), [0]
+
+        def prepare(p: Photo):
             try:
-                full = p.fetch("full")
-                images.append(imaging.prepare_for_tv(full, s["image_fit"], s["portrait_fit"]))
-                ids.append(p.id)
-                self.store_thumb(p.id, full)  # instant preview of what's on the TV
+                image = imaging.prepare_for_tv(p.fetch("full"), s["image_fit"], s["portrait_fit"])
+                self.store_thumb(p.id, image)  # preview of exactly what goes on the TV
+                return p.id, image
             except Exception as exc:
                 self.state.log(f"Skipped a photo: {exc}", "warning")
+                return None
+            finally:
+                done[0] += 1
+                self.state.set(last_message=f"Downloading and preparing photos… {done[0]}/{total}")
+
+        with ThreadPoolExecutor(max_workers=PREPARE_WORKERS, thread_name_prefix="prepare") as pool:
+            prepared = [r for r in pool.map(prepare, chosen) if r]  # keeps album order
+        ids = [i for i, _ in prepared]
+        images = [im for _, im in prepared]
+        timings["download+prepare"] = time.monotonic() - t0
         if not images:
             raise SourceError("None of the selected photos could be downloaded.")
 
@@ -200,12 +219,20 @@ class Syncer:
         prev_ids = [u["content_id"] for u in snap.get("uploaded", [])]
         pending = list(snap.get("pending_delete", []))
         fresh: list[str] = []
+
+        def uploaded_one(cid: str) -> None:
+            fresh.append(cid)
+            self.state.set(last_message=f"Uploading to the TV… {len(fresh)}/{len(images)}")
+
+        t0 = time.monotonic()
+        self.state.set(last_message=f"Uploading to the TV… 0/{len(images)}")
         try:
-            new = tv.upload_all(images, s["matte"], on_uploaded=fresh.append)
+            new = tv.upload_all(images, s["matte"], on_uploaded=uploaded_one)
         except Exception:
             # remember anything that did get onto the TV so it is cleaned up next time
             self.state.set(pending_delete=sorted(set(pending) | set(fresh)))
             raise
+        timings["upload"] = time.monotonic() - t0
         uploaded = [{"photo_id": i, "content_id": c} for i, c in zip(ids, new)]
         replace = s["replace_previous"]
         # save progress straight away so a later failure can never lose track of anything
@@ -218,7 +245,10 @@ class Syncer:
         if replace:
             doomed = self.state.snapshot().get("pending_delete", [])
             if doomed:
+                self.state.set(last_message=f"Removing {len(doomed)} old photo(s)…")
+                t0 = time.monotonic()
                 deleted, remaining, err = tv.delete(doomed)
+                timings["cleanup"] = time.monotonic() - t0
                 self.state.set(pending_delete=remaining)
                 if deleted:
                     removed_msg = f", removed {len(deleted)} old"
@@ -228,10 +258,14 @@ class Syncer:
                         f"{' (' + err + ')' if err else ''}; will retry next sync.", "warning")
                     removed_msg += f", {len(remaining)} old photo(s) could not be removed"
 
+        t0 = time.monotonic()
         for level, note in tv.show(new[0] if new and s["select_first"] else None,
                                    s["slideshow_minutes"], s["slideshow_shuffle"],
                                    s["enable_art_mode"]):
             self.state.log(note, level)
+        timings["display"] = time.monotonic() - t0
+        self.state.log("Timing: " + ", ".join(f"{k} {v:.1f}s" for k, v in timings.items())
+                       + f" (total {sum(timings.values()):.1f}s).")
         return f"Uploaded {len(new)} photo(s){removed_msg}."
 
     # -- scheduling --------------------------------------------------------

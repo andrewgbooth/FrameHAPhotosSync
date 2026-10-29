@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1
+- Faster syncs: old-photo cleanup no longer re-lists the TV's art library once per photo,
+  photos download and prepare two at a time, and the album isn't listed twice in a row.
+- Live progress while syncing, and a timing breakdown in the activity log.
+
 ## 0.5.0
 - Add icon and logo.
 - Tidy documentation.

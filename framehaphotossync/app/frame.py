@@ -141,20 +141,23 @@ class FrameTV:
         try:
             art = self._art()
             time.sleep(SETTLE_SECONDS)
-            present = [i for i in ids if i in _ids(art)]
+            existing = _ids(art)  # one listing per check, not one per photo
+            present = [i for i in ids if i in existing]
             if present:
                 try:
                     art.delete_list(present)
                 except Exception as exc:
                     errors.append(f"bulk delete: {type(exc).__name__}: {exc}")
-                present = [i for i in present if i in _ids(art)]
+                existing = _ids(art)
+                present = [i for i in present if i in existing]
             for cid in list(present):  # one at a time for anything that survived
                 try:
                     art.delete(cid)
                 except Exception as exc:
                     errors.append(f"{cid}: {type(exc).__name__}: {exc}")
             if present:
-                present = [i for i in present if i in _ids(art)]
+                existing = _ids(art)
+                present = [i for i in present if i in existing]
         except Exception as exc:
             return [], ids, f"{type(exc).__name__}: {exc}"
         return [i for i in ids if i not in present], present, "; ".join(errors[:3])
