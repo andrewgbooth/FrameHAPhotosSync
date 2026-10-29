@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 import socket
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,25 @@ FALLBACK_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_bla
                    "shadowbox_black", "shadowbox_polar", "flexible_polar"]
 
 
+def client_name(directory: Path) -> str:
+    """Unique, stable name this add-on pairs with TVs under (generated once per install).
+
+    The TV stores paired remotes by name and ties the saved token to it, so it must be
+    unique across installs and must not change between runs.
+    """
+    f = directory / "client_name"
+    try:
+        name = f.read_text().strip()
+        if name:
+            return name
+    except OSError:
+        pass
+    name = f"FrameHAPhotosSync-{secrets.token_hex(3)}"
+    directory.mkdir(parents=True, exist_ok=True)
+    f.write_text(name)
+    return name
+
+
 class FrameTV:
     def __init__(self, host: str, token_file: Path, port: int = 8002, timeout: int = 30) -> None:
         if not host:
@@ -23,6 +43,7 @@ class FrameTV:
         self.port = port
         self.token_file = token_file
         self.timeout = timeout
+        self.name = client_name(token_file.parent)
 
     def _art(self):
         from samsungtvws import SamsungTVWS  # noqa: F401  (ensures package present)
@@ -31,7 +52,7 @@ class FrameTV:
         self.token_file.parent.mkdir(parents=True, exist_ok=True)
         return SamsungTVArt(
             host=self.host, port=self.port, token_file=str(self.token_file),
-            timeout=self.timeout, name="FrameHAPhotosSync",
+            timeout=self.timeout, name=self.name,
         )
 
     def reachable(self) -> bool:
@@ -59,7 +80,7 @@ class FrameTV:
             if not supported:
                 raise SourceError("This TV doesn't report Frame Art Mode support.")
             return {"ok": True, "api_version": art.get_api_version(),
-                    "artmode": str(art.get_artmode())}
+                    "artmode": str(art.get_artmode()), "client_name": self.name}
         except SourceError:
             raise
         except Exception as exc:

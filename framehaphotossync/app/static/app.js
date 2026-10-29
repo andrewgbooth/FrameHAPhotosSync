@@ -121,7 +121,7 @@ $("tv_host").addEventListener("input", () => { tvName = ""; renderTvSelect(); })
 $("test-tv").onclick = (e) => busy(e.target, "tv-result", async () => {
   await save(true);
   const r = await api("POST", "tv/test");
-  say("tv-result", `Connected ✓ (Art API ${r.api_version})`, "ok");
+  say("tv-result", `Connected ✓ (Art API ${r.api_version}) — paired as “${r.client_name}”`, "ok");
 });
 
 $("load-mattes").onclick = (e) => busy(e.target, "save-result", async () => {
