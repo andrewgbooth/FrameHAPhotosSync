@@ -258,13 +258,6 @@ class Syncer:
                         f"{' (' + err + ')' if err else ''}; will retry next sync.", "warning")
                     removed_msg += f", {len(remaining)} old photo(s) could not be removed"
 
-        t0 = time.monotonic()
-        for level, note in tv.show(new[0] if new and s["select_first"] else None,
-                                   s["slideshow_minutes"], s["slideshow_shuffle"],
-                                   s["enable_art_mode"],
-                                   on_step=lambda m: self.state.set(last_message=m)):
-            self.state.log(note, level)
-        timings["display"] = time.monotonic() - t0
         self.state.log("Timing: " + ", ".join(f"{k} {v:.1f}s" for k, v in timings.items())
                        + f" (total {sum(timings.values()):.1f}s).")
         return f"Uploaded {len(new)} photo(s){removed_msg}."

@@ -13,7 +13,6 @@ from .sources import SourceError
 
 log = logging.getLogger(__name__)
 
-MY_PHOTOS = "MY-C0002"
 SETTLE_SECONDS = 2
 
 FALLBACK_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_black",
@@ -21,7 +20,6 @@ FALLBACK_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_bla
 
 
 REQUEST_TIMEOUT = 20    # seconds a single TV request may take
-ROTATION_TIMEOUT = 8     # seconds for the rotation/slideshow calls some TVs ignore
 UPLOAD_TIMEOUT = 120    # seconds for one photo upload (the TV generates thumbnails afterwards)
 
 
@@ -214,63 +212,6 @@ class FrameTV:
             raise self._wrap(exc) from exc
         deleted, left, err = self.delete(mine)
         return len(deleted), left, err
-
-    def show(self, first_id: str | None, slideshow_minutes: int, shuffle: bool,
-             art_mode: bool, on_step: Callable[[str], None] | None = None) -> list[tuple[str, str]]:
-        """Make the TV actually use the photos. Returns (level, message) notes; never raises."""
-        notes: list[tuple[str, str]] = []
-        try:
-            art = self._art()
-        except Exception as exc:
-            return [("warning", f"Couldn't reconnect to the TV to apply display settings: {exc}")]
-        step = on_step or (lambda _msg: None)
-        if slideshow_minutes > 0:
-            step("Setting the TV's photo rotation…")
-            notes.append(self._set_rotation(art, slideshow_minutes, shuffle))
-        if first_id:
-            step("Showing the newest photo…")
-            try:
-                art.select_image(first_id, show=True)
-                notes.append(("info", "Showing the newest photo now."))
-            except Exception as exc:
-                notes.append(("warning", f"Couldn't switch to the new photo: {exc}"))
-        if art_mode:
-            step("Switching the TV to Art Mode…")
-            try:
-                art.set_artmode(True)
-            except Exception as exc:
-                notes.append(("warning", f"Couldn't switch the TV to Art Mode: {exc}"))
-        return notes
-
-    @staticmethod
-    def _set_rotation(art, minutes: int, shuffle: bool) -> tuple[str, str]:
-        """Rotate the 'My Photos' category. Newer TVs use auto-rotation, older ones slideshow.
-
-        Some TVs never answer these calls, so each gets a short deadline, and a timeout (as opposed
-        to an explicit error) means "not supported here": don't wait again for the fallback.
-        """
-        errors = []
-        old = getattr(art, "request_timeout", None)
-        if old is not None:
-            art.request_timeout = ROTATION_TIMEOUT
-        try:
-            for name in ("set_auto_rotation_status", "set_slideshow_status"):
-                try:
-                    getattr(art, name)(duration=minutes, type=shuffle, category_id=MY_PHOTOS)
-                    every = f"{minutes} min" if minutes < 60 else f"{minutes / 60:g} h"
-                    return ("info", f"TV set to rotate through My Photos every {every}"
-                                    f"{' (shuffled)' if shuffle else ''}.")
-                except Exception as exc:
-                    errors.append(f"{name}: {exc}")
-                    if "did not answer" in str(exc) or isinstance(exc, TimeoutError):
-                        errors.append("the TV doesn't answer rotation requests")
-                        break
-        finally:
-            if old is not None:
-                art.request_timeout = old
-        return ("warning", "Couldn't set the TV's photo rotation (" + "; ".join(errors) + "). "
-                "Set it on the TV instead: Art Mode → Art Mode settings → Slideshow → My Photos, "
-                "or choose \"Don't change the TV's rotation\" here.")
 
 
 def _ids(art) -> set[str]:

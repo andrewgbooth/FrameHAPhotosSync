@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0
+- Removed the options the TV can manage itself: rotation, shuffle, showing the newest photo and
+  switching to Art Mode. Set them once on the TV (Art Mode → My Photos); the TV remembers them.
+  Matte stays, because the TV applies it per picture at upload.
+
 ## 0.5.3
 - *Rotate through My Photos* is now off by default (set it once on the TV, or opt in here). Some TVs
   never answer the request; it now gives up after 8 seconds and doesn't try the fallback call.

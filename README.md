@@ -17,9 +17,9 @@ A Home Assistant add-on that copies photos from an **iCloud shared album** to yo
   sRGB and saved as a small baseline JPEG, so the TV accepts it. Smart crop keeps the interesting part of
   the photo; portrait photos can be fitted over a blurred background instead.
 - **Schedule**: daily, weekly or monthly, at a time you choose.
-- **Makes the TV use them**: sets the TV to rotate through *My Photos* (optionally shuffled), shows the
-  newest photo straight away, and switches to Art Mode.
-- **Tidy**: removes the photos it uploaded last time (verified, retried if the TV is slow).
+- **Tidy**: removes the photos it uploaded last time (verified, retried if the TV is slow). Rotation,
+  shuffle and Art Mode stay under the TV's own control: choose *My Photos* once in the TV's Art Mode
+  settings and it keeps using whatever the add-on uploads.
 - **Find your TV**: picks up Samsung TVs from Home Assistant, or scans the network (SSDP, mDNS and a
   subnet probe) for Frames, including ones only known to SmartThings.
 - **Web UI** in the sidebar: settings, album preview (with *On TV* markers), *Sync now*, activity log.

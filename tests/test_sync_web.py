@@ -34,7 +34,7 @@ class FakeTV:
         if not host:
             raise SourceError("No TV selected.")
         self.host = host
-        self.uploaded, self.deleted, self.shown = [], [], []
+        self.uploaded, self.deleted = [], []
         FakeTV.instances.append(self)
 
     def upload_all(self, images, matte, on_uploaded=None):
@@ -55,12 +55,6 @@ class FakeTV:
         if FakeTV.fail_delete:
             return [], list(ids), "bulk delete: ResponseError"
         return list(ids), [], ""
-
-    def show(self, first_id, minutes, shuffle, art_mode, on_step=None):
-        if on_step:
-            on_step("Setting the TV's photo rotation…")
-        self.shown.append((first_id, minutes, shuffle, art_mode))
-        return [("info", "TV set to rotate through My Photos every 15 min (shuffled).")]
 
     def clear_my_photos(self):
         return 3, [], ""
@@ -92,7 +86,6 @@ def test_sync_uploads_newest_then_skips_when_unchanged_then_replaces(syncer):
     assert st["last_status"] == "ok" and [u["photo_id"] for u in st["uploaded"]] == ["p5", "p4", "p3"]
     tv = FakeTV.instances[-1]
     assert tv.uploaded == [(3, "shadowbox_polar")] and tv.deleted == []
-    assert tv.shown == [("MY_F0001", 0, True, True)]  # newest shown, rotation untouched, art mode on
     first_ids = [u["content_id"] for u in st["uploaded"]]
 
     syncer.run("schedule")  # nothing changed
@@ -238,7 +231,7 @@ def test_sync_logs_timing_and_reports_progress(syncer):
     syncer.run("manual")
     st = syncer.state.snapshot()
     timing = [l["msg"] for l in st["log"] if l["msg"].startswith("Timing:")]
-    assert timing and all(k in timing[0] for k in ("album", "download+prepare", "upload", "display"))
+    assert timing and all(k in timing[0] for k in ("album", "download+prepare", "upload"))
 
 
 def test_photos_prepared_in_album_order_even_when_one_fails(syncer):
