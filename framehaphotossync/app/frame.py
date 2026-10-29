@@ -20,6 +20,48 @@ FALLBACK_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_bla
                    "shadowbox_black", "shadowbox_polar", "flexible_polar"]
 
 
+REQUEST_TIMEOUT = 20    # seconds a single TV request may take
+UPLOAD_TIMEOUT = 120    # seconds for one photo upload (the TV generates thumbnails afterwards)
+
+
+def bounded_art_class():
+    """SamsungTVArt with a hard deadline per request.
+
+    The stock client waits for a reply in a loop and only gives up if the TV is silent for the
+    whole socket timeout. A TV that ignores one request but keeps sending other events (some
+    firmwares do for rotation/slideshow calls) would therefore hang the sync forever.
+    """
+    from samsungtvws import exceptions
+    from samsungtvws.art import SamsungTVArt
+
+    class BoundedArt(SamsungTVArt):
+        request_timeout = REQUEST_TIMEOUT
+        _deadline = None
+
+        def _send_art_request(self, request_data, *args, **kwargs):
+            self._deadline = time.monotonic() + self.request_timeout
+            try:
+                return super()._send_art_request(request_data, *args, **kwargs)
+            finally:
+                self._deadline = None
+
+        def _recv_frame(self):
+            if self._deadline is not None and time.monotonic() > self._deadline:
+                raise exceptions.ConnectionFailure(
+                    f"TV did not answer within {self.request_timeout:.0f}s")
+            return super()._recv_frame()
+
+        def upload(self, *args, **kwargs):
+            old, self.request_timeout = self.request_timeout, UPLOAD_TIMEOUT
+            try:
+                return super().upload(*args, **kwargs)
+            finally:
+                self.request_timeout = old
+                self._deadline = None
+
+    return BoundedArt
+
+
 def client_name(directory: Path) -> str:
     """Unique, stable name this add-on pairs with TVs under (generated once per install).
 
@@ -50,11 +92,8 @@ class FrameTV:
         self.name = client_name(token_file.parent)
 
     def _art(self):
-        from samsungtvws import SamsungTVWS  # noqa: F401  (ensures package present)
-        from samsungtvws.art import SamsungTVArt
-
         self.token_file.parent.mkdir(parents=True, exist_ok=True)
-        return SamsungTVArt(
+        return bounded_art_class()(
             host=self.host, port=self.port, token_file=str(self.token_file),
             timeout=self.timeout, name=self.name,
         )
@@ -172,22 +211,26 @@ class FrameTV:
         return len(deleted), left, err
 
     def show(self, first_id: str | None, slideshow_minutes: int, shuffle: bool,
-             art_mode: bool) -> list[tuple[str, str]]:
+             art_mode: bool, on_step: Callable[[str], None] | None = None) -> list[tuple[str, str]]:
         """Make the TV actually use the photos. Returns (level, message) notes; never raises."""
         notes: list[tuple[str, str]] = []
         try:
             art = self._art()
         except Exception as exc:
             return [("warning", f"Couldn't reconnect to the TV to apply display settings: {exc}")]
+        step = on_step or (lambda _msg: None)
         if slideshow_minutes > 0:
+            step("Setting the TV's photo rotation…")
             notes.append(self._set_rotation(art, slideshow_minutes, shuffle))
         if first_id:
+            step("Showing the newest photo…")
             try:
                 art.select_image(first_id, show=True)
                 notes.append(("info", "Showing the newest photo now."))
             except Exception as exc:
                 notes.append(("warning", f"Couldn't switch to the new photo: {exc}"))
         if art_mode:
+            step("Switching the TV to Art Mode…")
             try:
                 art.set_artmode(True)
             except Exception as exc:

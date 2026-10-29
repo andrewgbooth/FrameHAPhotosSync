@@ -56,7 +56,9 @@ class FakeTV:
             return [], list(ids), "bulk delete: ResponseError"
         return list(ids), [], ""
 
-    def show(self, first_id, minutes, shuffle, art_mode):
+    def show(self, first_id, minutes, shuffle, art_mode, on_step=None):
+        if on_step:
+            on_step("Setting the TV's photo rotation…")
         self.shown.append((first_id, minutes, shuffle, art_mode))
         return [("info", "TV set to rotate through My Photos every 15 min (shuffled).")]
 

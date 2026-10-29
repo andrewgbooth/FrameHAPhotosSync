@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+- Every request to the TV now has a hard deadline, so a TV that ignores a request can no longer hang a
+  sync forever; each final step reports what it is doing and failures become warnings.
+
 ## 0.5.1
 - Faster syncs: old-photo cleanup no longer re-lists the TV's art library once per photo,
   photos download and prepare two at a time, and the album isn't listed twice in a row.

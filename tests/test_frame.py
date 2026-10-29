@@ -113,3 +113,37 @@ def test_delete_lists_the_tv_library_a_constant_number_of_times(tv, monkeypatch)
     deleted, left, _ = tv.delete(ids)
     assert len(deleted) == 12 and left == []
     assert art.listings <= 3  # was ~one listing per photo per check
+
+
+class ChattyConnection:
+    """A TV that never answers our request but keeps sending unrelated events."""
+    def recv(self):
+        import time; time.sleep(0.01)
+        return '{"event": "ms.channel.clientConnect", "data": {}}'
+
+
+def test_ignored_request_times_out_instead_of_hanging(tmp_path):
+    import time
+    from samsungtvws import exceptions
+    art = frame.bounded_art_class()("10.0.0.2", token_file=str(tmp_path / "t"))
+    art.request_timeout = 0.3
+    art.connection = ChattyConnection()
+    art.send_command = lambda *a, **k: None  # pretend the request was sent
+    start = time.monotonic()
+    with pytest.raises(exceptions.ConnectionFailure, match="did not answer"):
+        art.get_artmode()
+    assert time.monotonic() - start < 3
+
+
+def test_show_reports_steps_and_survives_a_timeout(tv, monkeypatch):
+    class Art(FakeArt):
+        def set_auto_rotation_status(self, **kw):
+            raise TimeoutError("TV did not answer within 20s")
+        set_slideshow_status = set_auto_rotation_status
+    art = use(tv, monkeypatch, Art([]))
+    steps = []
+    notes = tv.show("MY_F1", 15, True, True, on_step=steps.append)
+    assert steps == ["Setting the TV's photo rotation…", "Showing the newest photo…",
+                     "Switching the TV to Art Mode…"]
+    assert any(l == "warning" and "rotation" in m for l, m in notes)
+    assert ("select", "MY_F1") in art.calls and ("artmode", True) in art.calls  # carried on
