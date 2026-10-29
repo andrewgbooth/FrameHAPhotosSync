@@ -47,6 +47,10 @@ shared album.
   Advanced Data Protection may not work. Apple occasionally asks for a fresh 2FA code.
 - Unofficial project, not affiliated with or endorsed by Apple or Samsung.
 
+## License
+
+[MIT](LICENSE)
+
 ## Development
 
 ```bash
