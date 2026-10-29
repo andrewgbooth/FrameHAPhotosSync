@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frame Photos Sync</title>
+<link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>Frame Photos Sync</h1>
+    <div id="status" class="status"><span id="status-dot" class="dot"></span><span id="status-text">Loading…</span></div>
+  </header>
+
+  <section class="card">
+    <h2>Sync</h2>
+    <div class="grid2">
+      <div><span class="k">Last run</span><span id="last-run">–</span></div>
+      <div><span class="k">Next run</span><span id="next-run">–</span></div>
+    </div>
+    <p id="last-message" class="muted"></p>
+    <button id="sync-now" class="primary">Sync now</button>
+  </section>
+
+  <section class="card">
+    <h2>Photo source</h2>
+    <div class="seg">
+      <label><input type="radio" name="source_type" value="public"> Public album link</label>
+      <label><input type="radio" name="source_type" value="private"> Private shared album (Apple ID)</label>
+    </div>
+
+    <div id="src-public" class="panel">
+      <label>Shared album link
+        <input id="public_url" placeholder="https://www.icloud.com/sharedalbum/#B0aG…">
+      </label>
+      <p class="hint">In Photos, open the shared album → People → enable <em>Public Website</em>, then copy the link.</p>
+      <button id="test-public">Test link</button> <span id="public-result" class="result"></span>
+    </div>
+
+    <div id="src-private" class="panel">
+      <div class="grid2">
+        <label>Apple ID <input id="icloud_apple_id" type="email" autocomplete="off"></label>
+        <label>Password <input id="icloud_password" type="password" autocomplete="new-password"></label>
+      </div>
+      <p class="hint">Use an <em>app-specific password</em> only if your account doesn't use 2FA codes; otherwise your normal password plus the 2FA code. Stored only in this add-on's private data.</p>
+      <button id="icloud-connect">Connect</button> <span id="icloud-result" class="result"></span>
+      <div id="twofa" class="row hidden">
+        <label>Verification code <input id="twofa-code" inputmode="numeric" maxlength="8" autocomplete="one-time-code"></label>
+        <button id="twofa-submit">Verify</button>
+      </div>
+      <div class="row">
+        <label class="grow">Shared album
+          <select id="private_album_id"></select>
+        </label>
+        <button id="albums-refresh">Load albums</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Samsung Frame TV</h2>
+    <div class="row">
+      <label class="grow">Home Assistant TV
+        <select id="tv-select"></select>
+      </label>
+      <label>IP address <input id="tv_host" placeholder="192.168.1.50"></label>
+    </div>
+    <button id="test-tv">Test connection</button> <span id="tv-result" class="result"></span>
+    <p class="hint">The first time, accept the pairing prompt that appears on the TV. The TV must be on or in Art Mode.</p>
+  </section>
+
+  <section class="card">
+    <h2>Schedule</h2>
+    <label class="check"><input type="checkbox" id="schedule_enabled"> Sync automatically</label>
+    <div class="row">
+      <label>Frequency
+        <select id="frequency"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select>
+      </label>
+      <label id="weekday-wrap">Day
+        <select id="weekday"><option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option><option value="4">Friday</option><option value="5">Saturday</option><option value="6">Sunday</option></select>
+      </label>
+      <label id="dom-wrap">Day of month <input id="day_of_month" type="number" min="1" max="31"></label>
+      <label>Time <input id="time" type="time"></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Options</h2>
+    <div class="row">
+      <label>Photos per sync <input id="photo_count" type="number" min="1" max="100"></label>
+      <label>Choose
+        <select id="selection"><option value="newest">Newest first</option><option value="random">Random (no repeats)</option></select>
+      </label>
+      <label>Fit
+        <select id="image_fit"><option value="crop">Fill screen (crop)</option><option value="blur">Fit with blurred edges</option><option value="none">Original shape (matte)</option></select>
+      </label>
+    </div>
+    <div class="row">
+      <label class="grow">Matte
+        <select id="matte"></select>
+      </label>
+      <button id="load-mattes">Load from TV</button>
+    </div>
+    <label class="check"><input type="checkbox" id="replace_previous"> Remove the photos this add-on uploaded previously</label>
+    <label class="check"><input type="checkbox" id="select_first"> Display the first new photo straight away</label>
+    <label class="check"><input type="checkbox" id="enable_art_mode"> Switch the TV to Art Mode after syncing</label>
+  </section>
+
+  <div class="savebar">
+    <button id="save" class="primary">Save settings</button> <span id="save-result" class="result"></span>
+  </div>
+
+  <section class="card">
+    <div class="row between"><h2>Album preview</h2><button id="preview-refresh">Refresh</button></div>
+    <p id="preview-info" class="muted"></p>
+    <div id="preview" class="photos"></div>
+  </section>
+
+  <section class="card">
+    <h2>Activity</h2>
+    <ul id="log" class="log"></ul>
+  </section>
+</main>
+<script src="static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+name: Frame Photos Sync
+version: "0.1.0"
+slug: framehaphotossync
+description: Sync iCloud shared album photos to a Samsung Frame TV as art, on a schedule.
+url: https://github.com/andrewgbooth/framehaphotossync
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:image-frame
+panel_title: Frame Photos
+homeassistant_api: true
+map:
+  - homeassistant_config:ro
+options: {}
+schema: {}

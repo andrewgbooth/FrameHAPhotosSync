@@ -1,0 +1,7 @@
+flask>=3.0,<4
+waitress>=3.0,<4
+requests>=2.31
+pillow>=10.3
+pillow-heif>=0.16
+samsungtvws>=3.0.6
+pyicloud>=2026.10.1
