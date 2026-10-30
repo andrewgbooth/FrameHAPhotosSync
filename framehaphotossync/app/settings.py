@@ -36,6 +36,11 @@ DEFAULTS: dict[str, Any] = {
     "selection": "newest",  # newest | random
     "replace_previous": True,
     "use_my_photos": False,  # after each sync, point the TV slideshow at all of My Photos
+    # Optional display settings (all off by default; the TV can manage these itself)
+    "slideshow_minutes": 0,  # 0 = leave the TV's rotation alone
+    "slideshow_shuffle": True,
+    "select_first": False,
+    "enable_art_mode": False,
     "matte": "none",
     "image_fit": "crop",  # crop | blur
     "portrait_fit": "blur",  # crop | blur (applies to portrait photos only)
@@ -82,6 +87,8 @@ def validate(values: dict[str, Any]) -> dict[str, Any]:
         raise SettingsError("day_of_month must be 1-31")
     if not 1 <= values["photo_count"] <= 100:
         raise SettingsError("photo_count must be 1-100")
+    if not 0 <= values["slideshow_minutes"] <= 10080:
+        raise SettingsError("slideshow_minutes must be 0-10080")
     if not 1 <= values["tv_port"] <= 65535:
         raise SettingsError("tv_port must be 1-65535")
     return values

@@ -138,10 +138,6 @@ def test_ignored_request_times_out_instead_of_hanging(tmp_path):
     assert time.monotonic() - start < 3
 
 
-def test_frame_client_no_longer_touches_tv_display_settings():
-    assert not any(hasattr(FrameTV, n) for n in ("show", "_set_rotation"))
-    from app.settings import DEFAULTS
-    assert not any(k in DEFAULTS for k in ("slideshow_minutes", "slideshow_shuffle", "select_first", "enable_art_mode"))
 
 
 def test_move_off_switches_a_single_photo_that_is_about_to_be_deleted(tv, monkeypatch):
@@ -240,3 +236,59 @@ def test_use_my_photos_never_raises_and_restores_the_request_timeout(tv, monkeyp
 def test_use_my_photos_defaults_off():
     from app.settings import DEFAULTS
     assert DEFAULTS["use_my_photos"] is False
+
+
+def test_show_orders_steps_so_rotation_survives_selecting_a_photo(tv, monkeypatch):
+    art = use(tv, monkeypatch, FakeArt([]))
+    steps = []
+    notes = tv.show("MY_F1", 15, True, True, on_step=steps.append)
+    kinds = [c[0] for c in art.calls]
+    assert kinds == ["select", "artmode", "auto"]  # rotation last: choosing a photo would end it
+    assert ("auto", {"duration": 15, "type": True, "category_id": "MY-C0002"}) in art.calls
+    assert steps == ["Showing the newest photo…", "Switching the TV to Art Mode…",
+                     "Setting the TV's photo rotation…"]
+    assert any("every 15 min" in m for _, m in notes)
+
+
+def test_show_only_does_what_was_asked(tv, monkeypatch):
+    art = use(tv, monkeypatch, FakeArt([]))
+    assert tv.show(None, 0, True, False) == [] and art.calls == []
+    tv.show("MY_F2", 0, False, False)
+    assert art.calls == [("select", "MY_F2", True)]
+
+
+def test_show_falls_back_to_slideshow_api_for_older_tvs(tv, monkeypatch):
+    art = use(tv, monkeypatch, FakeArt([], rotation="slideshow"))
+    notes = tv.show(None, 60, False, False)
+    assert art.calls[-1][0] == "slideshow" and any("every 1 h" in m for _, m in notes)
+
+
+def test_show_survives_a_tv_that_ignores_the_rotation_request(tv, monkeypatch):
+    class Art(FakeArt):
+        request_timeout = 20
+
+        def set_auto_rotation_status(self, **kw):
+            self.calls.append(("auto", self.request_timeout))
+            raise RuntimeError("TV did not answer within 8s")
+
+        def set_slideshow_status(self, **kw):
+            self.calls.append(("slideshow", None))
+    art = use(tv, monkeypatch, Art([]))
+    notes = tv.show("MY_F1", 15, True, True)
+    assert ("select", "MY_F1", True) in art.calls and ("artmode", True) in art.calls  # still done
+    assert ("auto", frame.ROTATION_TIMEOUT) in art.calls and not any(c[0] == "slideshow" for c in art.calls)
+    assert art.request_timeout == 20
+    assert any(l == "warning" and "rotation" in m and "Set it on the TV instead" in m for l, m in notes)
+
+
+def test_show_never_raises_when_the_tv_is_unreachable(tv, monkeypatch):
+    def boom():
+        raise OSError("tv off")
+    monkeypatch.setattr(tv, "_art", boom)
+    notes = tv.show("MY_F1", 15, True, True)
+    assert len(notes) == 1 and notes[0][0] == "warning"
+
+
+def test_display_options_default_to_off():
+    from app.settings import DEFAULTS
+    assert (DEFAULTS["slideshow_minutes"], DEFAULTS["select_first"], DEFAULTS["enable_art_mode"]) == (0, False, False)

@@ -57,6 +57,12 @@ class FakeTV:
             return [], list(ids), "bulk delete: ResponseError"
         return list(ids), [], ""
 
+    def show(self, first_id, minutes, shuffle, art_mode, on_step=None):
+        if on_step:
+            on_step("Setting the TV's photo rotation…")
+        self.shown = getattr(self, "shown", []) + [(first_id, minutes, shuffle, art_mode)]
+        return [("info", "TV set to rotate through My Photos every 15 min (shuffled).")]
+
     def use_my_photos(self):
         self.used_my_photos = True
         return ("info", "Pointed the TV's slideshow at all My Photos (every 15 min, as already set on the TV).")
@@ -288,3 +294,31 @@ def test_use_my_photos_runs_after_cleanup_only_when_enabled(syncer):
     st = syncer.state.snapshot()
     assert any("Pointed the TV's slideshow" in l["msg"] for l in st["log"])
     assert any("slideshow" in l["msg"] and l["msg"].startswith("Timing:") for l in st["log"])
+
+
+def test_display_options_are_off_by_default_and_applied_when_enabled(syncer):
+    syncer.run("manual")
+    assert not getattr(FakeTV.instances[-1], "shown", None)  # nothing touched by default
+    syncer.settings.update({"slideshow_minutes": 15, "slideshow_shuffle": True,
+                            "select_first": True, "enable_art_mode": True})
+    syncer.album = make_photos(7)
+    syncer.run("schedule")
+    tv = FakeTV.instances[-1]
+    assert tv.shown == [("MY_F0004", 15, True, True)]  # newest of the new batch
+    log = [l["msg"] for l in syncer.state.snapshot()["log"]]
+    assert any("rotate through My Photos every 15 min" in m for m in log)
+    assert any(m.startswith("Timing:") and "display" in m for m in log)
+
+
+def test_each_display_option_works_alone_and_without_select_first_nothing_is_selected(syncer):
+    syncer.settings.update({"enable_art_mode": True})
+    syncer.run("manual")
+    assert FakeTV.instances[-1].shown == [(None, 0, True, True)]
+
+
+def test_explicit_rotation_replaces_point_slideshow_at_my_photos(syncer):
+    syncer.settings.update({"slideshow_minutes": 60, "use_my_photos": True})
+    syncer.run("manual")
+    tv = FakeTV.instances[-1]
+    assert tv.shown and not getattr(tv, "used_my_photos", False)
+    assert any("already uses My Photos" in l["msg"] for l in syncer.state.snapshot()["log"])

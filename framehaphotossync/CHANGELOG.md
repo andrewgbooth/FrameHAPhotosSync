@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0
+- Brought back, as optional settings that are all off by default: rotate through My Photos (interval and
+  shuffle), show the newest photo, and switch to Art Mode. The rotation is applied last so choosing a
+  photo can't end it, and each request has a short deadline so a TV that ignores it can't stall a sync.
+
 ## 0.7.0
 - New optional setting: after each sync, point the TV's slideshow at all of My Photos. It keeps the
   interval and shuffle already set on the TV, and skips (with the reason in the log) if the TV won't

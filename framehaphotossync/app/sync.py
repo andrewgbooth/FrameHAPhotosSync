@@ -261,7 +261,19 @@ class Syncer:
                         f"{' (' + err + ')' if err else ''}; will retry next sync.", "warning")
                     removed_msg += f", {len(remaining)} old photo(s) could not be removed"
 
-        if s["use_my_photos"]:
+        if s["select_first"] or s["enable_art_mode"] or s["slideshow_minutes"] > 0:
+            t0 = time.monotonic()
+            for level, note in tv.show(new[0] if new and s["select_first"] else None,
+                                       s["slideshow_minutes"], s["slideshow_shuffle"],
+                                       s["enable_art_mode"],
+                                       on_step=lambda m: self.state.set(last_message=m)):
+                self.state.log(note, level)
+            timings["display"] = time.monotonic() - t0
+
+        if s["use_my_photos"] and s["slideshow_minutes"] > 0:
+            self.state.log("A rotation interval is set above, so it already uses My Photos; "
+                           "skipped \"point the slideshow at My Photos\".")
+        elif s["use_my_photos"]:
             self.state.set(last_message="Pointing the TV's slideshow at My Photos…")
             t0 = time.monotonic()
             level, note = tv.use_my_photos()

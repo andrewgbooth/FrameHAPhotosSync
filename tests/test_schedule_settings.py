@@ -59,11 +59,9 @@ def test_removed_fit_mode_is_migrated(tmp_path):
     assert s["image_fit"] == "crop" and s["portrait_fit"] == "blur" and s["photo_count"] == 4
 
 
-def test_removed_tv_settings_in_saved_files_are_ignored(tmp_path):
-    import json
-    f = tmp_path / "s.json"
-    f.write_text(json.dumps({"slideshow_minutes": 15, "enable_art_mode": True, "photo_count": 6}))
-    store = SettingsStore(f)
-    assert store.get()["photo_count"] == 6 and "slideshow_minutes" not in store.get()
-    store.update({"slideshow_minutes": 5, "photo_count": 7})  # an old browser tab still sending it
-    assert "slideshow_minutes" not in store.get() and store.get()["photo_count"] == 7
+def test_display_settings_validate(tmp_path):
+    store = SettingsStore(tmp_path / "s.json")
+    store.update({"slideshow_minutes": "60", "select_first": "true"})
+    assert store.get()["slideshow_minutes"] == 60 and store.get()["select_first"] is True
+    with pytest.raises(SettingsError):
+        store.update({"slideshow_minutes": 20000})
