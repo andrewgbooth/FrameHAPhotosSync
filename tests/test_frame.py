@@ -187,3 +187,56 @@ def test_move_off_never_raises_and_warns(tv, monkeypatch):
     level, msg = tv.move_off(["MY_F1"], "MY_F9")
     assert level == "warning" and "may fall back" in msg
     assert tv.move_off([], "MY_F9") is None and tv.move_off(["MY_F1"], "") is None
+
+
+class RotArt(FakeArt):
+    """A TV whose slideshow is on, pointed at the Samsung store."""
+    rotation_status = {"value": "60", "category_id": "MY-C0004", "type": "shuffleslideshow"}
+
+    def set_auto_rotation_status(self, **kw):
+        self.calls.append(("auto", kw))
+
+
+def test_use_my_photos_keeps_the_tvs_own_interval_and_shuffle(tv, monkeypatch):
+    art = use(tv, monkeypatch, RotArt([]))
+    level, msg = tv.use_my_photos()
+    assert level == "info" and "every 60 min, shuffled" in msg
+    assert art.calls == [("auto", {"duration": 60, "type": True, "category_id": "MY-C0002"})]
+
+    ordered = use(tv, monkeypatch, RotArt([]))
+    ordered.rotation_status = {"value": "3", "category_id": "MY-C0004", "type": "slideshow"}
+    tv.use_my_photos()
+    assert ordered.calls == [("auto", {"duration": 3, "type": False, "category_id": "MY-C0002"})]
+
+
+def test_use_my_photos_skips_when_already_set_off_or_unknown(tv, monkeypatch):
+    already = use(tv, monkeypatch, RotArt([]))
+    already.rotation_status = {"value": "15", "category_id": "MY-C0002", "type": "slideshow"}
+    assert "already using My Photos" in tv.use_my_photos()[1] and not already.calls
+
+    off = use(tv, monkeypatch, RotArt([]))
+    off.rotation_status = {"value": "off"}
+    level, msg = tv.use_my_photos()
+    assert level == "info" and "left alone" in msg and not off.calls  # never invents an interval
+
+    for unknown in (RuntimeError("TV did not answer within 8s"), {"nothing": 1}):
+        art = use(tv, monkeypatch, RotArt([]))
+        art.rotation_status = unknown
+        level, msg = tv.use_my_photos()
+        assert level == "warning" and "Couldn't read" in msg and not art.calls
+
+
+def test_use_my_photos_never_raises_and_restores_the_request_timeout(tv, monkeypatch):
+    class Art(RotArt):
+        request_timeout = 20
+
+        def set_auto_rotation_status(self, **kw):
+            raise RuntimeError("TV did not answer within 8s")
+    art = use(tv, monkeypatch, Art([]))
+    level, msg = tv.use_my_photos()
+    assert level == "warning" and "Choose My Photos" in msg and art.request_timeout == 20
+
+
+def test_use_my_photos_defaults_off():
+    from app.settings import DEFAULTS
+    assert DEFAULTS["use_my_photos"] is False

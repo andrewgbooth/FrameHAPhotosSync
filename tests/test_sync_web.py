@@ -57,6 +57,10 @@ class FakeTV:
             return [], list(ids), "bulk delete: ResponseError"
         return list(ids), [], ""
 
+    def use_my_photos(self):
+        self.used_my_photos = True
+        return ("info", "Pointed the TV's slideshow at all My Photos (every 15 min, as already set on the TV).")
+
     def move_off(self, doomed, replacement):
         self.moved = getattr(self, "moved", []) + [(list(doomed), replacement)]
         return FakeTV.move_note
@@ -271,3 +275,16 @@ def test_old_photos_are_never_deleted_unless_every_new_upload_succeeded(syncer):
     assert st["uploaded"] == before  # the photos on the TV are still the tracked, current set
     assert all(not tv.deleted for tv in FakeTV.instances[1:])  # nothing was deleted
     assert st["pending_delete"] == [f"MY_F{FakeTV.counter:04d}"]  # only the stray new one is queued
+
+
+def test_use_my_photos_runs_after_cleanup_only_when_enabled(syncer):
+    syncer.run("manual")
+    assert not getattr(FakeTV.instances[-1], "used_my_photos", False)  # off by default
+    syncer.settings.update({"use_my_photos": True})
+    syncer.album = make_photos(7)
+    syncer.run("schedule")
+    tv = FakeTV.instances[-1]
+    assert tv.used_my_photos and tv.deleted  # ran, and after the old photos were removed
+    st = syncer.state.snapshot()
+    assert any("Pointed the TV's slideshow" in l["msg"] for l in st["log"])
+    assert any("slideshow" in l["msg"] and l["msg"].startswith("Timing:") for l in st["log"])

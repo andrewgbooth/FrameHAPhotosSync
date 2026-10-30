@@ -21,6 +21,7 @@ FALLBACK_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_bla
 
 
 REQUEST_TIMEOUT = 20    # seconds a single TV request may take
+MY_PHOTOS = "MY-C0002"
 QUERY_TIMEOUT = 8       # seconds for status queries some TVs ignore
 UPLOAD_TIMEOUT = 120    # seconds for one photo upload (the TV generates thumbnails afterwards)
 
@@ -241,28 +242,72 @@ class FrameTV:
                                "it may fall back to other art until you choose My Photos again.")
 
     @staticmethod
-    def _rotation_on(art) -> bool | None:
-        """True/False if the TV says whether a slideshow/auto-rotation is running, else None."""
+    def _rotation_status(art) -> tuple[str, dict] | None:
+        """The TV's slideshow settings as (setter method name, payload), or None if it won't say.
+
+        Newer TVs use auto-rotation, older ones slideshow. A TV that ignores one query ignores the
+        other, so a timeout ends the search (each query has a short deadline).
+        """
         old = getattr(art, "request_timeout", None)
         if old is not None:
             art.request_timeout = QUERY_TIMEOUT
         try:
-            for name in ("get_auto_rotation_status", "get_slideshow_status"):
+            for getter, setter in (("get_auto_rotation_status", "set_auto_rotation_status"),
+                                   ("get_slideshow_status", "set_slideshow_status")):
                 try:
-                    data = getattr(art, name)()
+                    data = getattr(art, getter)()
                     if isinstance(data, str):
                         data = json.loads(data)
                 except Exception as exc:
                     if "did not answer" in str(exc):
-                        return None  # a TV that ignores one of these ignores the other
+                        return None
                     continue
-                value = str(data.get("value", "")).strip().lower() if isinstance(data, dict) else ""
-                if value:
-                    return value not in ("off", "0")
+                if isinstance(data, dict) and str(data.get("value", "")).strip():
+                    return setter, data
             return None
         finally:
             if old is not None:
                 art.request_timeout = old
+
+    @classmethod
+    def _rotation_on(cls, art) -> bool | None:
+        """True/False if the TV says whether a slideshow is running, else None."""
+        status = cls._rotation_status(art)
+        if status is None:
+            return None
+        return str(status[1]["value"]).strip().lower() not in ("off", "0")
+
+    def use_my_photos(self) -> tuple[str, str]:
+        """Point the TV's slideshow at the whole My Photos category, keeping its own interval and
+        shuffle. Skips (with the reason) if the TV won't report them or has no slideshow running,
+        rather than inventing settings. Never raises."""
+        try:
+            art = self._art()
+            status = self._rotation_status(art)
+            if status is None:
+                return ("warning", "Couldn't read the TV's slideshow settings, so it was not pointed at "
+                                   "My Photos. Choose My Photos in the TV's Art Mode settings instead.")
+            setter, data = status
+            value = str(data["value"]).strip().lower()
+            if not value.isdigit() or int(value) <= 0:
+                return ("info", "The TV's slideshow is off, so it was left alone. Turn on a slideshow "
+                                "on the TV once; the add-on will then keep it pointed at My Photos.")
+            if data.get("category_id") == MY_PHOTOS:
+                return ("info", "The TV's slideshow is already using My Photos.")
+            shuffle = "shuffle" in str(data.get("type", "")).lower()
+            old = getattr(art, "request_timeout", None)
+            if old is not None:
+                art.request_timeout = QUERY_TIMEOUT
+            try:
+                getattr(art, setter)(duration=int(value), type=shuffle, category_id=MY_PHOTOS)
+            finally:
+                if old is not None:
+                    art.request_timeout = old
+            return ("info", f"Pointed the TV's slideshow at all My Photos (every {value} min"
+                            f"{', shuffled' if shuffle else ''}, as already set on the TV).")
+        except Exception as exc:
+            return ("warning", f"Couldn't point the TV's slideshow at My Photos ({exc}). Choose My "
+                               "Photos in the TV's Art Mode settings instead.")
 
     def clear_my_photos(self) -> tuple[int, list[str], str]:
         """Delete every user-uploaded photo ("MY_F…") from the TV. Returns (deleted, left, error)."""

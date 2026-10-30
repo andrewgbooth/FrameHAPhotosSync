@@ -261,6 +261,13 @@ class Syncer:
                         f"{' (' + err + ')' if err else ''}; will retry next sync.", "warning")
                     removed_msg += f", {len(remaining)} old photo(s) could not be removed"
 
+        if s["use_my_photos"]:
+            self.state.set(last_message="Pointing the TV's slideshow at My Photos…")
+            t0 = time.monotonic()
+            level, note = tv.use_my_photos()
+            self.state.log(note, level)
+            timings["slideshow"] = time.monotonic() - t0
+
         self.state.log("Timing: " + ", ".join(f"{k} {v:.1f}s" for k, v in timings.items())
                        + f" (total {sum(timings.values()):.1f}s).")
         return f"Uploaded {len(new)} photo(s){removed_msg}."

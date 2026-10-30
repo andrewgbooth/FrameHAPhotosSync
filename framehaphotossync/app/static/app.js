@@ -3,7 +3,7 @@ const $ = (id) => document.getElementById(id);
 const FIELDS = ["public_url", "icloud_apple_id", "icloud_password", "tv_host", "time", "frequency",
   "weekday", "day_of_month", "photo_count", "selection", "image_fit", "portrait_fit", "matte"];
 const NUMERIC = ["weekday", "day_of_month", "photo_count"];
-const CHECKS = ["schedule_enabled", "replace_previous"];
+const CHECKS = ["schedule_enabled", "replace_previous", "use_my_photos"];
 const DEFAULT_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_black",
   "shadowbox_black", "shadowbox_polar", "flexible_polar"];
 let tvName = "", albumName = "", tvs = [], tvReason = "", haDevices = [], pollTimer = null;

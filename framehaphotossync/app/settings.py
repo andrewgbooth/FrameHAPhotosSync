@@ -35,6 +35,7 @@ DEFAULTS: dict[str, Any] = {
     "photo_count": 10,
     "selection": "newest",  # newest | random
     "replace_previous": True,
+    "use_my_photos": False,  # after each sync, point the TV slideshow at all of My Photos
     "matte": "none",
     "image_fit": "crop",  # crop | blur
     "portrait_fit": "blur",  # crop | blur (applies to portrait photos only)

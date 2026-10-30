@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0
+- New optional setting: after each sync, point the TV's slideshow at all of My Photos. It keeps the
+  interval and shuffle already set on the TV, and skips (with the reason in the log) if the TV won't
+  report them or has no slideshow running. Off by default.
+
 ## 0.6.2
 - Fix: the TV could end up stuck on one photo. Moving the TV off a photo that is about to be deleted
   also turns a running slideshow off, so it is now only done when the TV positively reports that no

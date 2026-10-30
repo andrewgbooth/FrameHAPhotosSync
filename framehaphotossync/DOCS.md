@@ -32,6 +32,7 @@ connection accept the pairing prompt on the TV. The TV must be on or in Art Mode
 | Photos per sync | How many photos to upload each run. |
 | Choose | *Newest first*, or *Random* (no repeats until the whole album has been shown). |
 | Landscape / Portrait photos | *Fill screen (smart crop)* or *Fit with blurred edges*. Every photo is output at 16:9 whatever you choose. |
+| Point the slideshow at My Photos | Optional, off by default. After each sync, tells the TV to use all of My Photos as its slideshow source, keeping the interval and shuffle you set on the TV. Skipped (and logged) if the TV won't report its slideshow settings or has no slideshow running. |
 | Matte | The Frame's matte style; *Load from TV* lists what your TV supports. Kept here (unlike the settings below) because the TV applies a matte per picture, so one set on the TV would be lost when the add-on replaces the photos. |
 | Remove previous | Deletes only photos this add-on uploaded earlier, never your other art. Anything the TV fails to delete is retried next sync. |
 
