@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 import socket
@@ -203,6 +204,30 @@ class FrameTV:
         except Exception as exc:
             return [], ids, f"{type(exc).__name__}: {exc}"
         return [i for i in ids if i not in present], present, "; ".join(errors[:3])
+
+    def move_off(self, doomed_ids: list[str], replacement_id: str) -> tuple[str, str] | None:
+        """If the TV is displaying one of ``doomed_ids``, switch it to ``replacement_id`` first.
+
+        Deleting the picture on screen makes the TV fall back to something else (often stock art)
+        and nothing switches it back. Anything else the TV is showing is left alone. Never raises.
+        """
+        if not doomed_ids or not replacement_id:
+            return None
+        try:
+            art = self._art()
+            current = art.get_current()
+            if isinstance(current, str):
+                current = json.loads(current)
+            shown = current.get("content_id") if isinstance(current, dict) else None
+            if shown not in set(doomed_ids):
+                return None
+            in_art_mode = str(art.get_artmode()).lower() == "on"
+            # show=False just changes the selection, so a TV being watched isn't flipped to art
+            art.select_image(replacement_id, show=in_art_mode)
+            return ("info", "The TV was showing a photo that is being replaced; moved it to the newest one.")
+        except Exception as exc:
+            return ("warning", f"Couldn't move the TV off a photo that is being deleted ({exc}); "
+                               "it may fall back to other art until you choose My Photos again.")
 
     def clear_my_photos(self) -> tuple[int, list[str], str]:
         """Delete every user-uploaded photo ("MY_F…") from the TV. Returns (deleted, left, error)."""

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+- Before removing old photos, if the TV is displaying one of them it is switched to the newest new
+  photo first, so the TV doesn't fall back to stock art. Anything else on screen is left alone.
+
 ## 0.6.0
 - Removed the options the TV can manage itself: rotation, shuffle, showing the newest photo and
   switching to Art Mode. Set them once on the TV (Art Mode → My Photos); the TV remembers them.

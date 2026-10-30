@@ -42,6 +42,9 @@ to the TV, and it remembers it between syncs. On the Frame, open **Art Mode** an
 settings, choose **My Photos** as the source and pick a slideshow interval and shuffle if you want
 rotation. The exact menu names differ between models and software versions.
 
+The one exception to "the TV is in charge": if the photo currently on screen is about to be removed, the
+add-on first moves the TV to the newest new photo, because otherwise the TV falls back to other art.
+
 *Sync now* always re-uploads. Scheduled runs skip when the newest selection hasn't changed.
 
 *Delete all My Photos from the TV* removes every photo in the TV's My Photos (not Samsung's art

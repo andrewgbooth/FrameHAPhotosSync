@@ -247,6 +247,9 @@ class Syncer:
             if doomed:
                 self.state.set(last_message=f"Removing {len(doomed)} old photo(s)…")
                 t0 = time.monotonic()
+                note = tv.move_off(doomed, new[0])  # don't delete the picture on screen
+                if note:
+                    self.state.log(note[1], note[0])
                 deleted, remaining, err = tv.delete(doomed)
                 timings["cleanup"] = time.monotonic() - t0
                 self.state.set(pending_delete=remaining)

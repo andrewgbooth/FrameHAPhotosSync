@@ -27,6 +27,7 @@ def make_photos(n):
 class FakeTV:
     instances = []
     fail_delete = False
+    move_note = None
     fail_upload_after = None
     counter = 0
 
@@ -56,6 +57,10 @@ class FakeTV:
             return [], list(ids), "bulk delete: ResponseError"
         return list(ids), [], ""
 
+    def move_off(self, doomed, replacement):
+        self.moved = getattr(self, "moved", []) + [(list(doomed), replacement)]
+        return FakeTV.move_note
+
     def clear_my_photos(self):
         return 3, [], ""
 
@@ -69,7 +74,7 @@ class FakeTV:
 @pytest.fixture
 def syncer(tmp_path, monkeypatch):
     FakeTV.instances.clear()
-    FakeTV.fail_delete, FakeTV.fail_upload_after, FakeTV.counter = False, None, 0
+    FakeTV.fail_delete, FakeTV.fail_upload_after, FakeTV.counter, FakeTV.move_note = False, None, 0, None
     settings = SettingsStore(tmp_path / "settings.json")
     settings.update({"tv_host": "10.0.0.5", "tv_name": "Frame", "photo_count": 3,
                      "public_url": "B0abcdefgh", "matte": "shadowbox_polar"})
@@ -242,3 +247,15 @@ def test_photos_prepared_in_album_order_even_when_one_fails(syncer):
     st = syncer.state.snapshot()
     assert [u["photo_id"] for u in st["uploaded"]] == ["p5", "p3"]  # p4 skipped, order kept
     assert any("Skipped a photo" in l["msg"] for l in st["log"])
+
+
+def test_sync_moves_tv_off_a_photo_before_it_is_deleted(syncer):
+    syncer.run("manual")
+    first = [u["content_id"] for u in syncer.state.snapshot()["uploaded"]]
+    FakeTV.move_note = ("info", "The TV was showing a photo that is being replaced; moved it to the newest one.")
+    syncer.album = make_photos(7)
+    syncer.run("schedule")
+    tv = FakeTV.instances[-1]
+    assert tv.moved == [(first, "MY_F0004")]  # asked before deleting, pointing at the newest new photo
+    assert any("moved it to the newest" in l["msg"] for l in syncer.state.snapshot()["log"])
+    assert tv.deleted == [first]

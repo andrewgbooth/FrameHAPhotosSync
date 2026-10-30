@@ -47,10 +47,19 @@ class FakeArt:
         self.calls.append(("slideshow", kw))
 
     def select_image(self, cid, show=True):
-        self.calls.append(("select", cid))
+        self.calls.append(("select", cid, show))
 
     def set_artmode(self, v):
         self.calls.append(("artmode", v))
+
+    current = {"content_id": "MY_F1"}
+    artmode = "on"
+
+    def get_current(self):
+        return self.current
+
+    def get_artmode(self):
+        return self.artmode
 
 
 @pytest.fixture
@@ -124,3 +133,30 @@ def test_frame_client_no_longer_touches_tv_display_settings():
     assert not any(hasattr(FrameTV, n) for n in ("show", "_set_rotation"))
     from app.settings import DEFAULTS
     assert not any(k in DEFAULTS for k in ("slideshow_minutes", "slideshow_shuffle", "select_first", "enable_art_mode"))
+
+
+def test_move_off_switches_only_when_the_displayed_photo_is_doomed(tv, monkeypatch):
+    art = use(tv, monkeypatch, FakeArt([]))
+    note = tv.move_off(["MY_F1", "MY_F2"], "MY_F9")
+    assert note[0] == "info" and ("select", "MY_F9", True) in art.calls
+
+    art2 = use(tv, monkeypatch, FakeArt([]))
+    art2.current = {"content_id": "ART_STORE_7"}  # stock art the user chose: leave alone
+    assert tv.move_off(["MY_F1"], "MY_F9") is None and not any(c[0] == "select" for c in art2.calls)
+
+
+def test_move_off_does_not_flip_a_tv_being_watched_to_art_mode(tv, monkeypatch):
+    art = use(tv, monkeypatch, FakeArt([]))
+    art.artmode = "off"
+    tv.move_off(["MY_F1"], "MY_F9")
+    assert ("select", "MY_F9", False) in art.calls
+
+
+def test_move_off_never_raises_and_warns(tv, monkeypatch):
+    class Art(FakeArt):
+        def get_current(self):
+            raise RuntimeError("TV did not answer within 20s")
+    use(tv, monkeypatch, Art([]))
+    level, msg = tv.move_off(["MY_F1"], "MY_F9")
+    assert level == "warning" and "may fall back" in msg
+    assert tv.move_off([], "MY_F9") is None and tv.move_off(["MY_F1"], "") is None
