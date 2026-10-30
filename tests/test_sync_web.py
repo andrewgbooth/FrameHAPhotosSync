@@ -259,3 +259,15 @@ def test_sync_moves_tv_off_a_photo_before_it_is_deleted(syncer):
     assert tv.moved == [(first, "MY_F0004")]  # asked before deleting, pointing at the newest new photo
     assert any("moved it to the newest" in l["msg"] for l in syncer.state.snapshot()["log"])
     assert tv.deleted == [first]
+
+
+def test_old_photos_are_never_deleted_unless_every_new_upload_succeeded(syncer):
+    syncer.run("manual")
+    before = syncer.state.snapshot()["uploaded"]
+    syncer.album = make_photos(9)  # new photos waiting
+    FakeTV.fail_upload_after = 1  # the TV drops out after one upload (e.g. switched off)
+    assert syncer.run("schedule") is False
+    st = syncer.state.snapshot()
+    assert st["uploaded"] == before  # the photos on the TV are still the tracked, current set
+    assert all(not tv.deleted for tv in FakeTV.instances[1:])  # nothing was deleted
+    assert st["pending_delete"] == [f"MY_F{FakeTV.counter:04d}"]  # only the stray new one is queued
