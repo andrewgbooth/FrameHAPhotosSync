@@ -1,5 +1,5 @@
 name: Frame Photos Sync
-version: "0.6.1"
+version: "0.6.2"
 slug: framehaphotossync
 description: Sync iCloud shared album photos to a Samsung Frame TV as art, on a schedule.
 url: https://github.com/andrewgbooth/FrameHAPhotosSync

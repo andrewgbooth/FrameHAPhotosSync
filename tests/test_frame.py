@@ -54,6 +54,15 @@ class FakeArt:
 
     current = {"content_id": "MY_F1"}
     artmode = "on"
+    rotation_status = {"value": "off"}
+
+    def get_auto_rotation_status(self):
+        if isinstance(self.rotation_status, Exception):
+            raise self.rotation_status
+        return self.rotation_status
+
+    def get_slideshow_status(self):
+        return self.rotation_status
 
     def get_current(self):
         return self.current
@@ -135,14 +144,32 @@ def test_frame_client_no_longer_touches_tv_display_settings():
     assert not any(k in DEFAULTS for k in ("slideshow_minutes", "slideshow_shuffle", "select_first", "enable_art_mode"))
 
 
-def test_move_off_switches_only_when_the_displayed_photo_is_doomed(tv, monkeypatch):
-    art = use(tv, monkeypatch, FakeArt([]))
+def test_move_off_switches_a_single_photo_that_is_about_to_be_deleted(tv, monkeypatch):
+    art = use(tv, monkeypatch, FakeArt([]))  # slideshow off, showing MY_F1
     note = tv.move_off(["MY_F1", "MY_F2"], "MY_F9")
     assert note[0] == "info" and ("select", "MY_F9", True) in art.calls
 
     art2 = use(tv, monkeypatch, FakeArt([]))
     art2.current = {"content_id": "ART_STORE_7"}  # stock art the user chose: leave alone
     assert tv.move_off(["MY_F1"], "MY_F9") is None and not any(c[0] == "select" for c in art2.calls)
+
+
+def test_move_off_never_ends_a_running_slideshow(tv, monkeypatch):
+    for running in ({"value": "15"}, {"value": "3"}, {"value": "1440", "category_id": "MY-C0002"}):
+        art = use(tv, monkeypatch, FakeArt([]))
+        art.rotation_status = running
+        note = tv.move_off(["MY_F1"], "MY_F9")
+        assert note[0] == "info" and "slideshow" in note[1]
+        assert not any(c[0] == "select" for c in art.calls)  # selecting would stop the slideshow
+
+
+def test_move_off_leaves_display_alone_when_slideshow_state_is_unknown(tv, monkeypatch):
+    for unknown in (RuntimeError("TV did not answer within 8s"), {"unexpected": True}):
+        art = use(tv, monkeypatch, FakeArt([]))
+        art.rotation_status = unknown
+        note = tv.move_off(["MY_F1"], "MY_F9")
+        assert note[0] == "warning" and "left alone" in note[1]
+        assert not any(c[0] == "select" for c in art.calls)
 
 
 def test_move_off_does_not_flip_a_tv_being_watched_to_art_mode(tv, monkeypatch):

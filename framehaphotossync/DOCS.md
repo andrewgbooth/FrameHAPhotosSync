@@ -45,8 +45,9 @@ rotation. The exact menu names differ between models and software versions.
 Old photos are only removed after every new photo has been uploaded, so if the TV is off or a
 sync fails part-way, your current photos stay in place.
 
-The one exception to "the TV is in charge": if the photo currently on screen is about to be removed, the
-add-on first moves the TV to the newest new photo, because otherwise the TV falls back to other art.
+The one exception to "the TV is in charge": if the TV is showing a *single* photo (no slideshow running)
+and that photo is about to be removed, the add-on first moves the TV to the newest new photo, because
+otherwise the TV falls back to other art. A running slideshow is never touched.
 
 *Sync now* always re-uploads. Scheduled runs skip when the newest selection hasn't changed.
 

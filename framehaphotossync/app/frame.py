@@ -21,6 +21,7 @@ FALLBACK_MATTES = ["none", "modernthin_black", "modernthin_neutral", "modern_bla
 
 
 REQUEST_TIMEOUT = 20    # seconds a single TV request may take
+QUERY_TIMEOUT = 8       # seconds for status queries some TVs ignore
 UPLOAD_TIMEOUT = 120    # seconds for one photo upload (the TV generates thumbnails afterwards)
 
 
@@ -206,10 +207,11 @@ class FrameTV:
         return [i for i in ids if i not in present], present, "; ".join(errors[:3])
 
     def move_off(self, doomed_ids: list[str], replacement_id: str) -> tuple[str, str] | None:
-        """If the TV is displaying one of ``doomed_ids``, switch it to ``replacement_id`` first.
+        """If the TV shows a single photo that is about to be deleted, switch to ``replacement_id``.
 
-        Deleting the picture on screen makes the TV fall back to something else (often stock art)
-        and nothing switches it back. Anything else the TV is showing is left alone. Never raises.
+        Deleting the picture on screen makes the TV fall back to other art. But choosing a picture
+        also turns a running slideshow off, so only do it when the TV is positively *not* running
+        one; a slideshow just carries on with the next picture. Never raises.
         """
         if not doomed_ids or not replacement_id:
             return None
@@ -221,13 +223,46 @@ class FrameTV:
             shown = current.get("content_id") if isinstance(current, dict) else None
             if shown not in set(doomed_ids):
                 return None
+            rotating = self._rotation_on(art)
+            if rotating is True:
+                return ("info", "The TV is running a slideshow, so it will move on from the photo "
+                                "being replaced by itself.")
+            if rotating is None:
+                return ("warning", "The TV is showing a photo that is being replaced, but it didn't say "
+                                   "whether a slideshow is running, so its display was left alone. If it "
+                                   "falls back to other art, choose My Photos on the TV again.")
             in_art_mode = str(art.get_artmode()).lower() == "on"
             # show=False just changes the selection, so a TV being watched isn't flipped to art
             art.select_image(replacement_id, show=in_art_mode)
-            return ("info", "The TV was showing a photo that is being replaced; moved it to the newest one.")
+            return ("info", "The TV was showing a single photo that is being replaced; moved it to the "
+                            "newest one.")
         except Exception as exc:
             return ("warning", f"Couldn't move the TV off a photo that is being deleted ({exc}); "
                                "it may fall back to other art until you choose My Photos again.")
+
+    @staticmethod
+    def _rotation_on(art) -> bool | None:
+        """True/False if the TV says whether a slideshow/auto-rotation is running, else None."""
+        old = getattr(art, "request_timeout", None)
+        if old is not None:
+            art.request_timeout = QUERY_TIMEOUT
+        try:
+            for name in ("get_auto_rotation_status", "get_slideshow_status"):
+                try:
+                    data = getattr(art, name)()
+                    if isinstance(data, str):
+                        data = json.loads(data)
+                except Exception as exc:
+                    if "did not answer" in str(exc):
+                        return None  # a TV that ignores one of these ignores the other
+                    continue
+                value = str(data.get("value", "")).strip().lower() if isinstance(data, dict) else ""
+                if value:
+                    return value not in ("off", "0")
+            return None
+        finally:
+            if old is not None:
+                art.request_timeout = old
 
     def clear_my_photos(self) -> tuple[int, list[str], str]:
         """Delete every user-uploaded photo ("MY_F…") from the TV. Returns (deleted, left, error)."""

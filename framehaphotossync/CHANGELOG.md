@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2
+- Fix: the TV could end up stuck on one photo. Moving the TV off a photo that is about to be deleted
+  also turns a running slideshow off, so it is now only done when the TV positively reports that no
+  slideshow is running. A running (or unknown) slideshow is left alone.
+
 ## 0.6.1
 - Before removing old photos, if the TV is displaying one of them it is switched to the newest new
   photo first, so the TV doesn't fall back to stock art. Anything else on screen is left alone.
